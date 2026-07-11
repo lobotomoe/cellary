@@ -1,0 +1,32 @@
+#ifndef CellaryModeSwitcher_h
+#define CellaryModeSwitcher_h
+
+#include <DriverKit/IOService.iig>
+#include <USBDriverKit/IOUSBHostDevice.iig>
+
+/*!
+ * @class CellaryModeSwitcher
+ * @abstract DriverKit extension that intercepts USB modems in storage mode
+ *           and sends vendor-specific SCSI commands to trigger mode switch.
+ *
+ * Matches on IOUSBHostDevice (device level) with known VID/PID pairs for
+ * storage-mode USB modems. By matching at device level with a high probe score,
+ * this driver claims the device BEFORE IOUSBMassStorageDriver can load.
+ *
+ * Flow:
+ * 1. Device plugged in with storage-mode VID/PID
+ * 2. IOKit matches this DEXT (higher probe score than mass storage)
+ * 3. Start() opens device, finds mass storage interface, sends vendor SCSI CBW
+ * 4. Device re-enumerates with modem-mode PID
+ * 5. DEXT auto-unloads (PID no longer matches)
+ * 6. Normal modem drivers can now claim the device
+ */
+class CellaryModeSwitcher : public IOService {
+public:
+    virtual bool init() override;
+    virtual void free() override;
+    virtual kern_return_t Start(IOService *provider) override;
+    virtual kern_return_t Stop(IOService *provider) override;
+};
+
+#endif /* CellaryModeSwitcher_h */

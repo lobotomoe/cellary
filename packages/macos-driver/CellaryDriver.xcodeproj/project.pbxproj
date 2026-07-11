@@ -1,0 +1,451 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		6E6BED4E93E36159C6F96DDD /* CellaryDriverApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7A4EBC8D98DE42E07043D996 /* CellaryDriverApp.swift */; };
+		8085C3A7C73394B931A2240C /* CellaryModeSwitcher.cpp in Sources */ = {isa = PBXBuildFile; fileRef = 73506046A0BC8A252543AF48 /* CellaryModeSwitcher.cpp */; };
+		D8BC427285FA5E53B82F9644 /* CellaryModeSwitcher.iig in Sources */ = {isa = PBXBuildFile; fileRef = 432FC0DA30BE16B26F1B36E2 /* CellaryModeSwitcher.iig */; };
+		DDDD478CC25D49C17C99E426 /* ModeSwitcher.systemextension in Embed System Extensions */ = {isa = PBXBuildFile; fileRef = 5C9481CEB580EE33C24CB4FA /* ModeSwitcher.systemextension */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		845A979E95061C1332E00C22 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = C041A2CE5152D7098C8B90C1 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A016B4C1A79DED9E3362D8F1;
+			remoteInfo = ModeSwitcher;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXCopyFilesBuildPhase section */
+		9DD3896FB7E28E073852D2B7 /* Embed System Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(SYSTEM_EXTENSIONS_FOLDER_PATH)";
+			dstSubfolderSpec = 16;
+			files = (
+				DDDD478CC25D49C17C99E426 /* ModeSwitcher.systemextension in Embed System Extensions */,
+			);
+			name = "Embed System Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
+/* Begin PBXFileReference section */
+		0FAA3FBBF7483B07F880D9CC /* CellaryDriver.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = CellaryDriver.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		432FC0DA30BE16B26F1B36E2 /* CellaryModeSwitcher.iig */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.iig; path = CellaryModeSwitcher.iig; sourceTree = "<group>"; };
+		5C9481CEB580EE33C24CB4FA /* ModeSwitcher.systemextension */ = {isa = PBXFileReference; explicitFileType = "wrapper.system-extension"; includeInIndex = 0; path = ModeSwitcher.systemextension; sourceTree = BUILT_PRODUCTS_DIR; };
+		73506046A0BC8A252543AF48 /* CellaryModeSwitcher.cpp */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.cpp.cpp; path = CellaryModeSwitcher.cpp; sourceTree = "<group>"; };
+		7A4EBC8D98DE42E07043D996 /* CellaryDriverApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CellaryDriverApp.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		327D33B128C93800EDCB5AF2 = {
+			isa = PBXGroup;
+			children = (
+				9191C7408B693C5FA46BA137 /* App */,
+				3CF53889F416CBD2611A3605 /* Driver */,
+				735E87CB137A408F149FF9CF /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		3CF53889F416CBD2611A3605 /* Driver */ = {
+			isa = PBXGroup;
+			children = (
+				73506046A0BC8A252543AF48 /* CellaryModeSwitcher.cpp */,
+				432FC0DA30BE16B26F1B36E2 /* CellaryModeSwitcher.iig */,
+			);
+			path = Driver;
+			sourceTree = "<group>";
+		};
+		735E87CB137A408F149FF9CF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				5C9481CEB580EE33C24CB4FA /* ModeSwitcher.systemextension */,
+				0FAA3FBBF7483B07F880D9CC /* CellaryDriver.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		9191C7408B693C5FA46BA137 /* App */ = {
+			isa = PBXGroup;
+			children = (
+				7A4EBC8D98DE42E07043D996 /* CellaryDriverApp.swift */,
+			);
+			path = App;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		9D5C06839CEC812759B20C12 /* CellaryDriver */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = C06D9263EC825E581B026C2E /* Build configuration list for PBXNativeTarget "CellaryDriver" */;
+			buildPhases = (
+				F14B543E35A9DBC265918984 /* Sources */,
+				9DD3896FB7E28E073852D2B7 /* Embed System Extensions */,
+				CF55771FA4D563412DF8E226 /* Embed System Extension */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				E506F9B3F73C96F29F6B6879 /* PBXTargetDependency */,
+			);
+			name = CellaryDriver;
+			packageProductDependencies = (
+			);
+			productName = CellaryDriver;
+			productReference = 0FAA3FBBF7483B07F880D9CC /* CellaryDriver.app */;
+			productType = "com.apple.product-type.application";
+		};
+		A016B4C1A79DED9E3362D8F1 /* ModeSwitcher */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 1C480F5C40EFF6D199102ED1 /* Build configuration list for PBXNativeTarget "ModeSwitcher" */;
+			buildPhases = (
+				06DAC76F82A3785703751AA4 /* Sources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = ModeSwitcher;
+			packageProductDependencies = (
+			);
+			productName = ModeSwitcher;
+			productReference = 5C9481CEB580EE33C24CB4FA /* ModeSwitcher.systemextension */;
+			productType = "com.apple.product-type.system-extension";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		C041A2CE5152D7098C8B90C1 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1500;
+				TargetAttributes = {
+					9D5C06839CEC812759B20C12 = {
+						DevelopmentTeam = T822AUM7XY;
+					};
+					A016B4C1A79DED9E3362D8F1 = {
+						DevelopmentTeam = T822AUM7XY;
+					};
+				};
+			};
+			buildConfigurationList = 1ADBE53E487E59DC275C239D /* Build configuration list for PBXProject "CellaryDriver" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = 327D33B128C93800EDCB5AF2;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 735E87CB137A408F149FF9CF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				A016B4C1A79DED9E3362D8F1 /* ModeSwitcher */,
+				9D5C06839CEC812759B20C12 /* CellaryDriver */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		CF55771FA4D563412DF8E226 /* Embed System Extension */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			name = "Embed System Extension";
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "# xcodegen handles embedding via dependency, but ensure the DEXT is in the right place\necho \"DEXT will be embedded at: ${BUILT_PRODUCTS_DIR}/${SYSTEM_EXTENSION_INSTALL_PATH}\"\n";
+		};
+/* End PBXShellScriptBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		06DAC76F82A3785703751AA4 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8085C3A7C73394B931A2240C /* CellaryModeSwitcher.cpp in Sources */,
+				D8BC427285FA5E53B82F9644 /* CellaryModeSwitcher.iig in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		F14B543E35A9DBC265918984 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				6E6BED4E93E36159C6F96DDD /* CellaryDriverApp.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		E506F9B3F73C96F29F6B6879 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = A016B4C1A79DED9E3362D8F1 /* ModeSwitcher */;
+			targetProxy = 845A979E95061C1332E00C22 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		1770CF62C6A0F5B1388CA633 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cellary.driver;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				SYSTEM_EXTENSION_INSTALL_PATH = Contents/Library/SystemExtensions;
+			};
+			name = Release;
+		};
+		68FE8AF87C99FB8503C95DA8 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = T822AUM7XY;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		752246689089E4AE600E1980 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_ENTITLEMENTS = Driver/Driver.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				DRIVERKIT_DEPLOYMENT_TARGET = 22.0;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Driver/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					DriverKit,
+					"-framework",
+					USBDriverKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cellary.driver.ModeSwitcher;
+				PRODUCT_NAME = ModeSwitcher;
+				SDKROOT = driverkit;
+			};
+			name = Release;
+		};
+		9DCE032487B329CA36B0BA0C /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_CXX_LANGUAGE_STANDARD = "c++17";
+				CODE_SIGN_ENTITLEMENTS = Driver/Driver.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				DRIVERKIT_DEPLOYMENT_TARGET = 22.0;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Driver/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				OTHER_LDFLAGS = (
+					"-framework",
+					DriverKit,
+					"-framework",
+					USBDriverKit,
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cellary.driver.ModeSwitcher;
+				PRODUCT_NAME = ModeSwitcher;
+				SDKROOT = driverkit;
+			};
+			name = Debug;
+		};
+		D4A891BD17B365AA2B7F1375 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = App/App.entitlements;
+				COMBINE_HIDPI_IMAGES = YES;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				PRODUCT_BUNDLE_IDENTIFIER = com.cellary.driver;
+				SDKROOT = macosx;
+				SWIFT_VERSION = 5.9;
+				SYSTEM_EXTENSION_INSTALL_PATH = Contents/Library/SystemExtensions;
+			};
+			name = Debug;
+		};
+		FF3FE06B8B0B58C21F33FDE1 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = T822AUM7XY;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 13.0;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		1ADBE53E487E59DC275C239D /* Build configuration list for PBXProject "CellaryDriver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				FF3FE06B8B0B58C21F33FDE1 /* Debug */,
+				68FE8AF87C99FB8503C95DA8 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		1C480F5C40EFF6D199102ED1 /* Build configuration list for PBXNativeTarget "ModeSwitcher" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9DCE032487B329CA36B0BA0C /* Debug */,
+				752246689089E4AE600E1980 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		C06D9263EC825E581B026C2E /* Build configuration list for PBXNativeTarget "CellaryDriver" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				D4A891BD17B365AA2B7F1375 /* Debug */,
+				1770CF62C6A0F5B1388CA633 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = C041A2CE5152D7098C8B90C1 /* Project object */;
+}

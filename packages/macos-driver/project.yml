@@ -1,0 +1,64 @@
+name: CellaryDriver
+options:
+  bundleIdPrefix: com.cellary
+  deploymentTarget:
+    macOS: "13.0"
+  xcodeVersion: "15.0"
+
+settings:
+  base:
+    MACOSX_DEPLOYMENT_TARGET: "13.0"
+    DEVELOPMENT_TEAM: T822AUM7XY
+
+targets:
+  # ── Container App ──────────────────────────────────────────────────────
+  CellaryDriver:
+    type: application
+    platform: macOS
+    sources:
+      - path: App
+        includes:
+          - "*.swift"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cellary.driver
+        INFOPLIST_KEY_LSApplicationCategoryType: "public.app-category.utilities"
+        CODE_SIGN_ENTITLEMENTS: App/App.entitlements
+        SWIFT_VERSION: "5.9"
+        # Embed the DEXT in the app bundle
+        SYSTEM_EXTENSION_INSTALL_PATH: "Contents/Library/SystemExtensions"
+    dependencies:
+      - target: ModeSwitcher
+    postBuildScripts:
+      - name: "Embed System Extension"
+        script: |
+          # xcodegen handles embedding via dependency, but ensure the DEXT is in the right place
+          echo "DEXT will be embedded at: ${BUILT_PRODUCTS_DIR}/${SYSTEM_EXTENSION_INSTALL_PATH}"
+
+  # ── DriverKit Extension ────────────────────────────────────────────────
+  ModeSwitcher:
+    type: system-extension
+    platform: macOS
+    sources:
+      - path: Driver
+        includes:
+          - "*.iig"
+          - "*.cpp"
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.cellary.driver.ModeSwitcher
+        PRODUCT_NAME: ModeSwitcher
+        CODE_SIGN_ENTITLEMENTS: Driver/Driver.entitlements
+        INFOPLIST_FILE: Driver/Info.plist
+        # DriverKit build settings
+        SDKROOT: driverkit
+        DRIVERKIT_DEPLOYMENT_TARGET: "22.0"
+        CLANG_CXX_LANGUAGE_STANDARD: "c++17"
+        # Link required frameworks
+        OTHER_LDFLAGS:
+          - "-framework"
+          - "DriverKit"
+          - "-framework"
+          - "USBDriverKit"
+        # Use our hand-written Info.plist with IOKitPersonalities
+        GENERATE_INFOPLIST_FILE: NO

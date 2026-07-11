@@ -1,0 +1,42 @@
+{
+  "name": "@cellary/daemon",
+  "version": "0.0.1",
+  "private": true,
+  "description": "Privileged USB daemon for cellary",
+  "type": "module",
+  "bin": {
+    "cellaryd": "./dist/main.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/main.d.ts",
+      "import": "./dist/main.js"
+    },
+    "./client": {
+      "types": "./dist/ipc/client.d.ts",
+      "import": "./dist/ipc/client.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "pino": "^10.3.1",
+    "superjson": "^2.2.6",
+    "cellary": "workspace:*",
+    "zod": "^4.3.6"
+  },
+  "devDependencies": {
+    "@types/node": "^25.3.3",
+    "tsup": "^8.0.0",
+    "typescript": "^5.7.0"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,0 +1,22 @@
+node_modules
+dist
+coverage
+*.tsbuildinfo
+.DS_Store
+*.log
+log.txt
+
+playground/
+logs/
+.claude/
+
+# Firmware binaries (large, device-specific)
+*.bin
+
+# Compiled artifacts
+*.o
+*.exe
+*.obj
+
+# Third-party tools with their own git repos
+balongflash/

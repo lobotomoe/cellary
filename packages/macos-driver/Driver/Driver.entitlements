@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Required for all DriverKit extensions -->
+    <key>com.apple.developer.driverkit</key>
+    <true/>
+
+    <!-- USB transport access: list every VID/PID pair the driver can match -->
+    <key>com.apple.developer.driverkit.transport.usb</key>
+    <array>
+        <!-- Huawei storage PIDs (VID 0x12D1 = 4817) -->
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>5374</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>7937</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>7938</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>5501</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>5515</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>5190</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>4097</integer></dict>
+        <dict><key>idVendor</key><integer>4817</integer><key>idProduct</key><integer>7179</integer></dict>
+        <!-- ZTE storage PIDs (VID 0x19D2 = 6610) -->
+        <dict><key>idVendor</key><integer>6610</integer><key>idProduct</key><integer>8192</integer></dict>
+        <dict><key>idVendor</key><integer>6610</integer><key>idProduct</key><integer>83</integer></dict>
+    </array>
+</dict>
+</plist>
