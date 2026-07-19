@@ -49,6 +49,16 @@ function createMockDevice(vendorId: number, productId: number) {
   return { deviceDescriptor: { idVendor: vendorId, idProduct: productId } }
 }
 
+/** A device that classifies as an unknown modem only via its CDC ACM interface. */
+function createMockCdcDevice(vendorId: number, productId: number) {
+  return {
+    deviceDescriptor: { idVendor: vendorId, idProduct: productId },
+    configDescriptor: {
+      interfaces: [[{ bInterfaceClass: 0x02, bInterfaceSubClass: 0x02, bInterfaceProtocol: 0x01 }]],
+    },
+  }
+}
+
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
 describe('watch()', () => {
@@ -184,6 +194,23 @@ describe('watch()', () => {
     if (call === undefined) throw new Error('expected listener to have been called')
     const [event] = call
     expect(event.type).toBe('detached')
+  })
+
+  it('emits detached for an unknown CDC device even when its descriptors are gone', () => {
+    const listener = vi.fn()
+    watch(listener)
+
+    // Attach: descriptors readable -> classified as unknown modem-usb (entry undefined).
+    mockUsb._emit('attach', createMockCdcDevice(0xaaaa, 0xbbbb))
+    // Detach: the device is gone, descriptors unreadable (no configDescriptor).
+    // Re-classification would fail; the detach must still fire via the cached deviceId.
+    mockUsb._emit('detach', createMockDevice(0xaaaa, 0xbbbb))
+
+    expect(listener).toHaveBeenCalledTimes(2)
+    const [attachCall, detachCall] = listener.mock.calls
+    expect(attachCall?.[0].type).toBe('attached')
+    expect(attachCall?.[0].modem.entry).toBeUndefined()
+    expect(detachCall?.[0].type).toBe('detached')
   })
 
   it('does not emit duplicate attached for same device', () => {

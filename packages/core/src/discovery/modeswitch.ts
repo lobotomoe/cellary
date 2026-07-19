@@ -8,19 +8,48 @@
  * Switch methods tried in order:
  * 1. Vendor-specific methods from the database (vendor control, SCSI CBW)
  * 2. macOS diskutil eject fallback (when OS loaded the mass storage driver)
+ *
+ * All macOS device lookups go through the structured ioreg parser (ioreg.ts),
+ * which keeps each device's `BSD Name` scoped to its own subtree. This module
+ * therefore never ejects a disk it cannot attribute to the target modem — a
+ * safety property that matters because `diskutil eject` on the wrong disk is
+ * data loss.
  */
 
-import { execFileSync } from 'node:child_process'
+import { execFile } from 'node:child_process'
 import { createRequire } from 'node:module'
+import { promisify } from 'node:util'
 
 import type { Device, OutEndpoint } from 'usb'
 import { findByIds, getDeviceList } from 'usb'
 
 import { DiscoveryError } from '../errors.js'
 import { sleep } from '../utils.js'
+import {
+  busLocationToLocationId,
+  type IoregUsbDevice,
+  readIoregUsbDevices,
+  selectIoregDevice,
+  wholeDiskBsdName,
+} from './ioreg.js'
+import type { ScsiCbwSwitch, SwitchMethod, UsbLocation, VendorControlSwitch } from './usb-types.js'
+
+// Re-exported for callers that import switch descriptors alongside switchDevice().
+export type { ScsiCbwSwitch, SwitchMethod, VendorControlSwitch }
+
+const execFileAsync = promisify(execFile)
 
 const POLL_INTERVAL_MS = 3000
 const POLL_MAX_ATTEMPTS = 6
+
+// macOS disk-device timing: the driver chain (IOUSBMassStorageDriver -> SCSI ->
+// IOMedia -> BSD) takes 1-5s to publish a BSD node after attach.
+const DISK_WAIT_MAX_MS = 15_000
+const DISK_WAIT_INTERVAL_MS = 1000
+const REENUM_WAIT_MAX_MS = 20_000
+const REENUM_WAIT_INTERVAL_MS = 2000
+const DISKUTIL_TIMEOUT_MS = 10_000
+const HELPER_TIMEOUT_MS = 20_000
 
 /** Minimal shape needed from StorageDeviceEntry for preflight (avoids circular import). */
 interface StorageDeviceEntry {
@@ -53,7 +82,11 @@ export async function preflightDarwinModeSwitch(
   if (process.platform !== 'darwin') return []
 
   const log = (msg: string) => process.stderr.write(`[modeswitch] ${msg}\n`)
-  const storageDevices = findStorageDevicesViaIoreg(database)
+  const storageLookup = buildStorageLookup(database)
+  if (storageLookup.size === 0) return []
+
+  const devices = await readIoregUsbDevices()
+  const storageDevices = devices.filter((d) => storageLookup.get(d.idVendor)?.pids.has(d.idProduct))
 
   if (storageDevices.length === 0) return []
 
@@ -61,22 +94,28 @@ export async function preflightDarwinModeSwitch(
 
   const ejected: Array<{ vendorId: number; productId: number }> = []
 
-  for (const { vendorId, productId, name } of storageDevices) {
-    log(`Preflight: ${name} (${hex(vendorId)}:${hex(productId)}) needs mode switch`)
+  for (const device of storageDevices) {
+    const name = storageLookup.get(device.idVendor)?.name ?? 'device'
+    log(`Preflight: ${name} (${hex(device.idVendor)}:${hex(device.idProduct)}) needs mode switch`)
 
-    const bsdName = await waitForBsdName(vendorId, productId, log)
+    // Wait for macOS to publish this exact device's disk (keyed by locationID).
+    const bsdName = await waitForWholeDisk(
+      device.idVendor,
+      device.idProduct,
+      device.locationID,
+      log,
+    )
     if (bsdName === undefined) {
       log(`Preflight: no disk device for ${name}, skipping`)
       continue
     }
 
     log(`Preflight: diskutil eject ${bsdName}`)
-    const ok = tryDiskutilEject(vendorId, productId)
+    const ok = await ejectDisk(bsdName)
     if (ok) {
       log(`Preflight: ejected ${name}, waiting for re-enumeration...`)
-      ejected.push({ vendorId, productId })
-      // Wait for device to re-enumerate before processing next device
-      await waitForIoregPidChange(vendorId, productId)
+      ejected.push({ vendorId: device.idVendor, productId: device.idProduct })
+      await waitForDeviceGone(device.idVendor, device.idProduct, device.locationID)
     } else {
       log(`Preflight: diskutil eject failed for ${name}`)
     }
@@ -85,91 +124,19 @@ export async function preflightDarwinModeSwitch(
   return ejected
 }
 
-function hex(n: number): string {
-  return `0x${n.toString(16).padStart(4, '0')}`
-}
-
-/**
- * Find USB devices on the bus that are in storage mode, using ioreg only.
- * No libusb calls — purely reads the IOKit registry.
- */
-function findStorageDevicesViaIoreg(
+function buildStorageLookup(
   database: readonly StorageDeviceEntry[],
-): Array<{ vendorId: number; productId: number; name: string }> {
-  // Build a lookup: VID -> Set<storage PIDs>
-  const storageLookup = new Map<number, { pids: Set<number>; name: string }>()
+): Map<number, { pids: Set<number>; name: string }> {
+  const lookup = new Map<number, { pids: Set<number>; name: string }>()
   for (const entry of database) {
     if (entry.storageProducts.length === 0) continue
-    storageLookup.set(entry.vendor, {
-      pids: new Set(entry.storageProducts),
-      name: entry.name,
-    })
+    lookup.set(entry.vendor, { pids: new Set(entry.storageProducts), name: entry.name })
   }
-
-  if (storageLookup.size === 0) return []
-
-  // Parse ioreg for USB devices
-  let output: string
-  try {
-    output = execFileSync('ioreg', ['-r', '-c', 'IOUSBHostDevice', '-l', '-w0'], {
-      encoding: 'utf-8',
-      timeout: 5000,
-    })
-  } catch {
-    return []
-  }
-
-  const found: Array<{ vendorId: number; productId: number; name: string }> = []
-  const vidPattern = /"idVendor" = (\d+)/g
-  const pidPattern = /"idProduct" = (\d+)/g
-
-  // Extract all VID/PID pairs from ioreg output
-  const vids = [...output.matchAll(vidPattern)].map((m) => Number(m[1]))
-  const pids = [...output.matchAll(pidPattern)].map((m) => Number(m[1]))
-
-  // VIDs and PIDs appear in device-level order; pair them by index
-  const count = Math.min(vids.length, pids.length)
-  for (let i = 0; i < count; i++) {
-    const vid = vids[i]
-    const pid = pids[i]
-    if (vid === undefined || pid === undefined) continue
-    const vendorInfo = storageLookup.get(vid)
-    if (vendorInfo?.pids.has(pid)) {
-      found.push({ vendorId: vid, productId: pid, name: vendorInfo.name })
-    }
-  }
-
-  return found
+  return lookup
 }
 
-/**
- * Wait for a device to change PID in ioreg (indicating mode switch completed).
- * Polls ioreg — no libusb involved.
- */
-async function waitForIoregPidChange(vendorId: number, oldProductId: number): Promise<void> {
-  const MAX_WAIT_MS = 20_000
-  const INTERVAL_MS = 2000
-
-  for (let waited = 0; waited < MAX_WAIT_MS; waited += INTERVAL_MS) {
-    await sleep(INTERVAL_MS)
-
-    try {
-      const output = execFileSync('ioreg', ['-r', '-c', 'IOUSBHostDevice', '-l', '-w0'], {
-        encoding: 'utf-8',
-        timeout: 5000,
-      })
-      // Check if the old storage PID is still present
-      const vidStr = `"idVendor" = ${vendorId}`
-      const pidStr = `"idProduct" = ${oldProductId}`
-      if (output.includes(vidStr) && output.includes(pidStr)) {
-        continue // still in storage mode
-      }
-      // Old PID gone — device either switched or disconnected
-      return
-    } catch {
-      return
-    }
-  }
+function hex(n: number): string {
+  return `0x${n.toString(16).padStart(4, '0')}`
 }
 
 // ── Helper path registry ────────────────────────────────────────────────────
@@ -186,24 +153,6 @@ export function registerModeswitchHelper(path: string): void {
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
-/** SCSI CBW mode switch -- sends vendor command via mass storage bulk OUT endpoint */
-export interface ScsiCbwSwitch {
-  readonly type: 'scsi-cbw'
-  readonly command: Uint8Array
-}
-
-/** USB vendor control transfer -- device-level control request, no interface needed */
-export interface VendorControlSwitch {
-  readonly type: 'vendor-control'
-  readonly requestType: number
-  readonly request: number
-  readonly value: number
-  readonly index: number
-}
-
-/** How to trigger USB re-enumeration from storage mode to modem mode */
-export type SwitchMethod = ScsiCbwSwitch | VendorControlSwitch
-
 export interface ModeSwitchResult {
   /** Whether the device successfully re-enumerated with a new product ID */
   readonly switched: boolean
@@ -218,12 +167,17 @@ export interface ModeSwitchResult {
  *
  * Tries each method in order. After all methods fail, tries macOS diskutil
  * eject as a last resort (works when the OS loaded a mass storage driver).
+ *
+ * @param location - Physical bus location of the target device, when known.
+ *   Used on macOS to disambiguate two identical (same VID:PID) modems. Without
+ *   it, an ambiguous target is refused rather than guessed.
  */
 export async function switchDevice(
   vendorId: number,
   productId: number,
   switchMethod: SwitchMethod | readonly SwitchMethod[],
   isModemProduct: (pid: number) => boolean,
+  location?: UsbLocation,
 ): Promise<ModeSwitchResult> {
   const methods = Array.isArray(switchMethod) ? switchMethod : [switchMethod]
   const log = (msg: string) => process.stderr.write(`[modeswitch] ${msg}\n`)
@@ -233,10 +187,14 @@ export async function switchDevice(
   // - SCSI CBW via libusb always fails with LIBUSB_ERROR_OTHER (can't claim from OS driver)
   // - diskutil eject goes through macOS's own driver chain with properly initialized pipes
   if (process.platform === 'darwin') {
-    const bsdName = await waitForBsdName(vendorId, productId, log)
+    const expectedLocationId =
+      location !== undefined
+        ? busLocationToLocationId(location.busNumber, location.portNumbers)
+        : undefined
+    const bsdName = await waitForWholeDisk(vendorId, productId, expectedLocationId, log)
     if (bsdName !== undefined) {
       log(`diskutil eject ${bsdName}`)
-      const ejected = tryDiskutilEject(vendorId, productId)
+      const ejected = await ejectDisk(bsdName)
       log(`diskutil eject: ${ejected ? 'OK' : 'failed'}`)
       if (ejected) {
         const result = await pollForDevice(vendorId, isModemProduct)
@@ -247,7 +205,7 @@ export async function switchDevice(
         log('diskutil eject: device did not re-enumerate')
       }
     } else {
-      log('macOS: no disk device, cannot mode-switch (device may need replug)')
+      log('macOS: no unambiguous disk device, cannot mode-switch (device may need replug)')
     }
     // Don't fall through to vendor-control/SCSI — they don't work on macOS
     // and vendor-control corrupts device state preventing future disk creation.
@@ -303,7 +261,7 @@ async function sendSwitchCommand(
     } catch {
       // In-process claim failed (e.g. macOS driver holds interface).
       // Spawn helper as separate process — clean libusb context can claim.
-      spawnModeswitchHelper(vendorId, productId, method.command)
+      await spawnModeswitchHelper(vendorId, productId, method.command)
     }
     return
   }
@@ -319,7 +277,11 @@ async function sendSwitchCommand(
  * daemon's USB hotplug watcher. On macOS, this is often the only way to
  * claim a mass storage interface held by IOUSBMassStorageDriver.
  */
-function spawnModeswitchHelper(vendorId: number, productId: number, cbw?: Uint8Array): void {
+async function spawnModeswitchHelper(
+  vendorId: number,
+  productId: number,
+  cbw?: Uint8Array,
+): Promise<void> {
   if (registeredHelperPath === undefined) {
     throw new DiscoveryError('Modeswitch helper not registered. Is the daemon running?')
   }
@@ -334,17 +296,30 @@ function spawnModeswitchHelper(vendorId: number, productId: number, cbw?: Uint8A
   process.stderr.write(`[modeswitch] Spawning helper: ${args.join(' ')}\n`)
 
   try {
-    execFileSync(process.execPath, args, {
-      timeout: 20_000,
-      stdio: 'pipe',
+    await execFileAsync(process.execPath, args, {
+      timeout: HELPER_TIMEOUT_MS,
     })
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : String(err)
-    // Helper exits non-zero when device disconnects mid-transfer — that's success
-    if (!msg.includes('SIGTERM') && !msg.includes('exit code')) {
+    // The helper exits non-zero or is killed when the device disconnects
+    // mid-transfer — that IS the success signal. Only a genuine spawn failure
+    // (e.g. ENOENT: node binary missing) is a real error.
+    if (isSpawnFailure(err)) {
+      const msg = err instanceof Error ? err.message : String(err)
       throw new DiscoveryError(`Mode switch helper failed: ${msg}`, { cause: err })
     }
   }
+}
+
+/**
+ * Distinguish a failure to spawn the process (real error) from a non-zero exit
+ * or kill (expected — the device disconnected during mode switch).
+ */
+function isSpawnFailure(err: unknown): boolean {
+  if (typeof err !== 'object' || err === null) return false
+  // A string `code` (ENOENT, EACCES, ...) means the process never ran.
+  // A numeric exit code or a kill signal means it ran and exited — expected.
+  if ('code' in err && typeof err.code === 'string') return true
+  return false
 }
 
 // ── In-process SCSI CBW ─────────────────────────────────────────────────────
@@ -467,15 +442,12 @@ async function pollForDevice(
 // ── macOS diskutil eject fallback ────────────────────────────────────────────
 
 /**
- * Eject a USB mass storage device via diskutil.
+ * Eject a USB mass storage device by BSD disk name via diskutil.
  * Some devices mode-switch when their virtual CD-ROM is ejected via the OS driver.
  */
-function tryDiskutilEject(vendorId: number, productId: number): boolean {
-  const bsdName = findBsdNameForUsb(vendorId, productId)
-  if (bsdName === undefined) return false
-
+async function ejectDisk(bsdName: string): Promise<boolean> {
   try {
-    execFileSync('diskutil', ['eject', bsdName], { timeout: 10_000 })
+    await execFileAsync('diskutil', ['eject', `/dev/${bsdName}`], { timeout: DISKUTIL_TIMEOUT_MS })
     return true
   } catch {
     return false
@@ -483,62 +455,76 @@ function tryDiskutilEject(vendorId: number, productId: number): boolean {
 }
 
 /**
- * Find the BSD disk name (e.g. "/dev/disk8") for a USB device by VID/PID.
- * Scans ioreg output for the device's VID+PID, then finds "BSD Name" in its subtree.
+ * Wait for macOS to publish the whole-disk BSD node for a specific USB device.
+ *
+ * Polls the IOKit registry, selecting the device by (vendor, product) and — when
+ * two identical devices are present — by physical location. If the target is
+ * ambiguous (two identical devices and no location match), returns undefined
+ * immediately: ejecting the wrong disk is worse than asking the user to replug.
  */
-/**
- * Wait for macOS to create a BSD disk device for the USB modem.
- * The driver chain (IOUSBMassStorageDriver -> SCSI -> IOMedia -> BSD) takes 1-5s.
- */
-async function waitForBsdName(
+async function waitForWholeDisk(
   vendorId: number,
   productId: number,
+  expectedLocationId: number | undefined,
   log: (msg: string) => void,
 ): Promise<string | undefined> {
-  const MAX_WAIT_MS = 15_000
-  const INTERVAL_MS = 1000
-  for (let waited = 0; waited < MAX_WAIT_MS; waited += INTERVAL_MS) {
-    const name = findBsdNameForUsb(vendorId, productId)
-    if (name !== undefined) return name
+  for (let waited = 0; waited < DISK_WAIT_MAX_MS; waited += DISK_WAIT_INTERVAL_MS) {
+    const devices = await readIoregUsbDevices()
+    const device = selectIoregDevice(devices, vendorId, productId, expectedLocationId)
+
+    if (device === undefined && countCandidates(devices, vendorId, productId) > 1) {
+      log('macOS: multiple identical devices and no location match; refusing to eject')
+      return undefined
+    }
+
+    if (device !== undefined) {
+      const bsdName = wholeDiskBsdName(device)
+      if (bsdName !== undefined) return bsdName
+    }
+
     log(`Waiting for macOS disk device... (${waited / 1000}s)`)
-    await sleep(INTERVAL_MS)
+    await sleep(DISK_WAIT_INTERVAL_MS)
   }
   log('No macOS disk device appeared')
   return undefined
 }
 
-function findBsdNameForUsb(vendorId: number, productId: number): string | undefined {
-  try {
-    const output = execFileSync('ioreg', ['-r', '-c', 'IOUSBHostDevice', '-l', '-w0'], {
-      encoding: 'utf-8',
-      timeout: 5000,
-    })
+/**
+ * Wait for a specific device to leave the USB bus after eject (mode switch).
+ * Keyed by locationID when known, so an identical sibling device staying on the
+ * bus does not keep this wait alive.
+ */
+async function waitForDeviceGone(
+  vendorId: number,
+  productId: number,
+  expectedLocationId: number | undefined,
+): Promise<void> {
+  for (let waited = 0; waited < REENUM_WAIT_MAX_MS; waited += REENUM_WAIT_INTERVAL_MS) {
+    await sleep(REENUM_WAIT_INTERVAL_MS)
 
-    const vidStr = `"idVendor" = ${vendorId}`
-    const pidStr = `"idProduct" = ${productId}`
-    const bsdPattern = /"BSD Name" = "(disk\d+)"/
-
-    const vidIndex = output.indexOf(vidStr)
-    if (vidIndex < 0) return undefined
-
-    const pidIndex = output.indexOf(pidStr)
-    if (pidIndex < 0) return undefined
-
-    const searchStart = Math.min(vidIndex, pidIndex)
-    const tail = output.slice(searchStart)
-
-    const nextDevice = tail.indexOf('<class IOUSBHostDevice')
-    const searchRegion = nextDevice > 0 ? tail.slice(0, nextDevice) : tail
-    const bsdMatch = bsdPattern.exec(searchRegion)
-    if (bsdMatch !== null) {
-      const [, name] = bsdMatch
-      if (name !== undefined) return `/dev/${name}`
+    let devices: readonly IoregUsbDevice[]
+    try {
+      devices = await readIoregUsbDevices()
+    } catch {
+      return
     }
-  } catch {
-    // ioreg failed
-  }
 
-  return undefined
+    const stillPresent = devices.some(
+      (d) =>
+        d.idVendor === vendorId &&
+        d.idProduct === productId &&
+        (expectedLocationId === undefined || d.locationID === expectedLocationId),
+    )
+    if (!stillPresent) return
+  }
+}
+
+function countCandidates(
+  devices: readonly IoregUsbDevice[],
+  vendorId: number,
+  productId: number,
+): number {
+  return devices.filter((d) => d.idVendor === vendorId && d.idProduct === productId).length
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

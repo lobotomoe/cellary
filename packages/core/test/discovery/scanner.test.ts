@@ -38,8 +38,18 @@ vi.mock('../../src/discovery/modeswitch.js', () => ({
   waitForDevice: mockWaitForDevice,
 }))
 
+// ── Mock serialport module ──────────────────────────────────────────────────
+
+const { mockSerialPortList } = vi.hoisted(() => ({
+  mockSerialPortList: vi.fn(async () => [] as unknown[]),
+}))
+
+vi.mock('serialport', () => ({
+  SerialPort: { list: mockSerialPortList },
+}))
+
 import { provision } from '../../src/discovery/provisioner.js'
-import { scanUsb } from '../../src/discovery/scanner.js'
+import { discover, scanUsb } from '../../src/discovery/scanner.js'
 import { USB_MODEM_DATABASE } from '../../src/discovery/usb-ids.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -54,11 +64,12 @@ function createMockDevice(
   vendorId: number,
   productId: number,
   interfaces?: MockInterfaceDescriptor[][],
+  location?: { busNumber: number; portNumbers: number[] },
 ) {
   return {
     deviceDescriptor: { idVendor: vendorId, idProduct: productId },
-    busNumber: 1,
-    portNumbers: [1],
+    busNumber: location?.busNumber ?? 1,
+    portNumbers: location?.portNumbers ?? [1],
     configDescriptor: interfaces
       ? { interfaces: interfaces.map((alts) => alts.map((alt) => ({ ...alt }))) }
       : undefined,
@@ -66,6 +77,23 @@ function createMockDevice(
     open: vi.fn(),
     close: vi.fn(),
     interface: vi.fn(),
+  }
+}
+
+function createMockPort(overrides: {
+  path: string
+  serialNumber?: string | undefined
+  vendorId?: string
+  productId?: string
+}) {
+  return {
+    path: overrides.path,
+    manufacturer: 'Huawei',
+    serialNumber: overrides.serialNumber,
+    pnpId: undefined,
+    locationId: undefined,
+    vendorId: overrides.vendorId ?? '12d1',
+    productId: overrides.productId ?? '1506',
   }
 }
 
@@ -78,6 +106,7 @@ describe('scanner', () => {
     mockRequestHiLinkModeSwitch.mockReset().mockResolvedValue(undefined)
     mockSwitchDevice.mockReset().mockResolvedValue({ switched: false, newProductId: undefined })
     mockWaitForDevice.mockReset().mockResolvedValue(undefined)
+    mockSerialPortList.mockReset().mockResolvedValue([])
   })
 
   describe('scanUsb()', () => {
@@ -233,6 +262,81 @@ describe('scanner', () => {
       expect(result.driver).toEqual({ kind: 'vendor', api: 'hilink' })
       expect(mockRequestHiLinkModeSwitch).not.toHaveBeenCalled()
       expect(mockSwitchDevice).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('discover() device identity', () => {
+    it('keeps two identical modems distinct by serial number', async () => {
+      mockSerialPortList.mockResolvedValue([
+        createMockPort({ path: '/dev/ttyUSB0', serialNumber: 'AAAA' }),
+        createMockPort({ path: '/dev/ttyUSB3', serialNumber: 'BBBB' }),
+      ])
+
+      const result = await discover()
+
+      const serialEntries = result.filter((m) => m.mode === 'serial')
+      expect(serialEntries).toHaveLength(2)
+      expect(new Set(serialEntries.map((m) => m.deviceId))).toEqual(
+        new Set(['serial:/dev/ttyUSB0', 'serial:/dev/ttyUSB3']),
+      )
+    })
+
+    it('collapses one modem exposing several ports (same serial) to one entry', async () => {
+      mockSerialPortList.mockResolvedValue([
+        createMockPort({ path: '/dev/ttyUSB0', serialNumber: 'AAAA' }),
+        createMockPort({ path: '/dev/ttyUSB1', serialNumber: 'AAAA' }),
+        createMockPort({ path: '/dev/ttyUSB2', serialNumber: 'AAAA' }),
+      ])
+
+      const result = await discover()
+
+      expect(result.filter((m) => m.mode === 'serial')).toHaveLength(1)
+      // Lowest sorted path wins (conventionally the AT command port).
+      expect(result[0]?.deviceId).toBe('serial:/dev/ttyUSB0')
+    })
+
+    it('falls back to VID:PID collapse when ports report no serial number', async () => {
+      mockSerialPortList.mockResolvedValue([
+        createMockPort({ path: '/dev/ttyUSB0', serialNumber: undefined }),
+        createMockPort({ path: '/dev/ttyUSB1', serialNumber: undefined }),
+      ])
+
+      const result = await discover()
+
+      expect(result.filter((m) => m.mode === 'serial')).toHaveLength(1)
+    })
+
+    it('drops only a USB entry paired with a serial twin, never a distinct device', async () => {
+      // One modem in serial mode + two identical modems visible via libusb.
+      mockSerialPortList.mockResolvedValue([
+        createMockPort({ path: '/dev/ttyUSB0', serialNumber: 'AAAA' }),
+      ])
+      mockGetDeviceList.mockReturnValue([
+        createMockDevice(0x12d1, 0x1506, undefined, { busNumber: 1, portNumbers: [1] }),
+        createMockDevice(0x12d1, 0x1506, undefined, { busNumber: 1, portNumbers: [2] }),
+      ])
+
+      const result = await discover()
+
+      // 1 serial + (2 usb - 1 twin) = 2 devices total. Neither USB device is hidden
+      // beyond the single serial twin.
+      expect(result).toHaveLength(2)
+      expect(result.filter((m) => m.mode === 'serial')).toHaveLength(1)
+      expect(result.filter((m) => m.mode === 'modem-usb')).toHaveLength(1)
+    })
+
+    it('prefers serial and drops the USB view of a single device seen in both', async () => {
+      mockSerialPortList.mockResolvedValue([
+        createMockPort({ path: '/dev/ttyUSB0', serialNumber: 'AAAA' }),
+      ])
+      mockGetDeviceList.mockReturnValue([
+        createMockDevice(0x12d1, 0x1506, undefined, { busNumber: 1, portNumbers: [1] }),
+      ])
+
+      const result = await discover()
+
+      expect(result).toHaveLength(1)
+      expect(result[0]?.mode).toBe('serial')
     })
   })
 })

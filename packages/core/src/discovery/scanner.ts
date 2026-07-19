@@ -14,14 +14,9 @@
 
 import { SerialPort } from 'serialport'
 import { getDeviceList } from 'usb'
-import { readInterfaceInfo } from './usb-descriptors.js'
-import { classifyUsbDevice, findModemEntry } from './usb-ids.js'
-import { computeUsbDeviceId, type DiscoveredModem, type UsbInterfaceInfo } from './usb-types.js'
-
-// ── USB interface class constants ────────────────────────────────────────────
-
-const USB_CLASS_CDC = 0x02
-const USB_SUBCLASS_ACM = 0x02
+import { classifyDevice } from './classify.js'
+import { findModemEntry } from './usb-ids.js'
+import type { DiscoveredModem } from './usb-types.js'
 
 // ── Public API ───────────────────────────────────────────────────────────────
 
@@ -37,37 +32,8 @@ const USB_SUBCLASS_ACM = 0x02
 export function scanUsb(): DiscoveredModem[] {
   const discovered: DiscoveredModem[] = []
   for (const dev of getDeviceList()) {
-    const { idVendor, idProduct } = dev.deviceDescriptor
-    const interfaces = readInterfaceInfo(dev)
-
-    // Fast path: VID/PID in database
-    const modem = classifyUsbDevice(
-      idVendor,
-      idProduct,
-      dev.busNumber,
-      dev.portNumbers ?? [],
-      interfaces,
-    )
-    if (modem !== undefined) {
-      discovered.push(modem)
-      continue
-    }
-
-    // Fallback: probe interface classes for CDC ACM (standard AT modem)
-    if (interfaces !== undefined && hasCdcAcmInterface(interfaces)) {
-      const busNumber = dev.busNumber
-      const portNumbers = dev.portNumbers ?? []
-      discovered.push({
-        mode: 'modem-usb',
-        vendorId: idVendor,
-        productId: idProduct,
-        deviceId: computeUsbDeviceId(idVendor, busNumber, portNumbers),
-        name: `USB Modem ${formatHex(idVendor)}:${formatHex(idProduct)}`,
-        entry: undefined,
-        busNumber,
-        portNumbers,
-      })
-    }
+    const modem = classifyDevice(dev)
+    if (modem !== undefined) discovered.push(modem)
   }
   return discovered
 }
@@ -90,30 +56,44 @@ export async function discover(): Promise<DiscoveredModem[]> {
   const usbModems = usbResult.status === 'fulfilled' ? usbResult.value : []
   const serialModems = serialResult.status === 'fulfilled' ? serialResult.value : []
 
-  // Prefer serial over USB for the same physical device
-  const serialKeys = new Set(serialModems.map((m) => `${m.vendorId}:${m.productId}`))
-  const filteredUsb = usbModems.filter((m) => !serialKeys.has(`${m.vendorId}:${m.productId}`))
+  return [...serialModems, ...dedupeUsbAgainstSerial(usbModems, serialModems)]
+}
 
-  return [...serialModems, ...filteredUsb]
+/**
+ * Prefer the serial view of a device over its USB view, WITHOUT hiding a distinct
+ * device that merely shares a VID:PID.
+ *
+ * On Linux a single modem appears both as a serial port and (via libusb) as a USB
+ * device — those must collapse to one entry. But two identical modems share a
+ * VID:PID, so a blanket "drop every USB entry with a matching serial VID:PID"
+ * hides the second device. Instead, drop only as many USB entries as there are
+ * serial twins to pair them with; any surplus USB device is genuinely separate
+ * and stays.
+ */
+function dedupeUsbAgainstSerial(
+  usbModems: readonly DiscoveredModem[],
+  serialModems: readonly DiscoveredModem[],
+): DiscoveredModem[] {
+  const serialTwinBudget = new Map<string, number>()
+  for (const modem of serialModems) {
+    const key = `${modem.vendorId}:${modem.productId}`
+    serialTwinBudget.set(key, (serialTwinBudget.get(key) ?? 0) + 1)
+  }
+
+  const kept: DiscoveredModem[] = []
+  for (const modem of usbModems) {
+    const key = `${modem.vendorId}:${modem.productId}`
+    const budget = serialTwinBudget.get(key) ?? 0
+    if (budget > 0) {
+      serialTwinBudget.set(key, budget - 1)
+      continue
+    }
+    kept.push(modem)
+  }
+  return kept
 }
 
 // ── Internals ────────────────────────────────────────────────────────────────
-
-/**
- * Check whether any interface group contains a CDC ACM interface.
- * CDC ACM (class 0x02, subclass 0x02) is the standard USB class for AT modems.
- */
-function hasCdcAcmInterface(interfaces: readonly UsbInterfaceInfo[][]): boolean {
-  return interfaces.some((alts) =>
-    alts.some(
-      (alt) => alt.bInterfaceClass === USB_CLASS_CDC && alt.bInterfaceSubClass === USB_SUBCLASS_ACM,
-    ),
-  )
-}
-
-function formatHex(value: number): string {
-  return `0x${value.toString(16).padStart(4, '0')}`
-}
 
 async function scanSerial(): Promise<(DiscoveredModem & { mode: 'serial' })[]> {
   const ports = await SerialPort.list()
@@ -129,7 +109,14 @@ async function scanSerial(): Promise<(DiscoveredModem & { mode: 'serial' })[]> {
     const productId = Number.parseInt(port.productId, 16)
     if (Number.isNaN(vendorId) || Number.isNaN(productId)) continue
 
-    const key = `${vendorId}:${productId}`
+    // One physical modem exposes several serial ports (AT, PPP, diag) that share
+    // a USB serial number, so collapse by serial number to a single entry. Two
+    // identical modems have DISTINCT serial numbers and must stay separate — a
+    // VID:PID key would wrongly merge them into one. Without a serial number
+    // (rare for real modems) fall back to VID:PID as a best-effort collapse.
+    const serial = port.serialNumber
+    const key =
+      serial !== undefined && serial.length > 0 ? `sn:${serial}` : `id:${vendorId}:${productId}`
     if (seen.has(key)) continue
     seen.add(key)
 

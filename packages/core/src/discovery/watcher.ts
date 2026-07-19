@@ -11,8 +11,7 @@
 import type { Device } from 'usb'
 import { getDeviceList, usb } from 'usb'
 
-import { readInterfaceInfo } from './usb-descriptors.js'
-import { classifyUsbDevice } from './usb-ids.js'
+import { classifyDevice, deviceIdForDevice } from './classify.js'
 import type { DiscoveredModem } from './usb-types.js'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -71,15 +70,17 @@ export function watch(listener: (event: ModemWatchEvent) => void): () => void {
   }
 
   const handleDetach = (device: Device) => {
-    const modem = classifyDevice(device)
-    if (modem === undefined) return
-
-    const key = modem.deviceId
+    // Do NOT re-classify on detach: the device is gone, so its interface
+    // descriptors are unreadable and an unknown (CDC-probed) device would fail
+    // to classify — losing the detach event and leaking the entry in `known`.
+    // The deviceId is a pure function of vendorId + bus location, all cached on
+    // the Device, so recompute the exact key that attach stored.
+    const key = deviceIdForDevice(device)
     const stored = known.get(key)
     if (stored === undefined) return
 
     known.delete(key)
-    // Use the stored modem — detach may have stale/partial USB descriptors.
+    // Emit the stored modem — it holds the full classification captured at attach.
     listener({ type: 'detached', modem: stored })
   }
 
@@ -90,18 +91,4 @@ export function watch(listener: (event: ModemWatchEvent) => void): () => void {
     usb.off('attach', handleAttach)
     usb.off('detach', handleDetach)
   }
-}
-
-// ── Internals ────────────────────────────────────────────────────────────────
-
-function classifyDevice(device: Device): DiscoveredModem | undefined {
-  const { idVendor, idProduct } = device.deviceDescriptor
-  const interfaces = readInterfaceInfo(device)
-  return classifyUsbDevice(
-    idVendor,
-    idProduct,
-    device.busNumber,
-    device.portNumbers ?? [],
-    interfaces,
-  )
 }

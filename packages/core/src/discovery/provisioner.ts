@@ -175,6 +175,7 @@ async function resolveTransport(
         modem.productId,
         entry.switchMethod,
         (pid) => isModemProduct(entry, pid),
+        { busNumber: modem.busNumber, portNumbers: modem.portNumbers },
       )
 
       if (!switchResult.switched) {
@@ -300,6 +301,7 @@ async function resolveHttpToAt(
         modem.productId,
         entry.switchMethod,
         isKnownModem,
+        { busNumber: modem.busNumber, portNumbers: modem.portNumbers },
       )
       if (switchResult.switched && switchResult.newProductId === atProductId) {
         return resolveUsbProductTransport(entry, atProductId)

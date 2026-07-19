@@ -7,9 +7,29 @@
  */
 
 import type { DeviceProfile, ModelInfo, ModemDriver } from '../types.js'
-import type { ScsiCbwSwitch, SwitchMethod, VendorControlSwitch } from './modeswitch.js'
 
-export type { ScsiCbwSwitch, SwitchMethod, VendorControlSwitch }
+// ── Mode switch descriptors ──────────────────────────────────────────────────
+// These describe how a database entry triggers storage -> modem re-enumeration.
+// They live here (the data layer) rather than in modeswitch.ts (the runtime) so
+// UsbModemEntry can reference them without a runtime->data import cycle.
+
+/** SCSI CBW mode switch -- sends vendor command via mass storage bulk OUT endpoint */
+export interface ScsiCbwSwitch {
+  readonly type: 'scsi-cbw'
+  readonly command: Uint8Array
+}
+
+/** USB vendor control transfer -- device-level control request, no interface needed */
+export interface VendorControlSwitch {
+  readonly type: 'vendor-control'
+  readonly requestType: number
+  readonly request: number
+  readonly value: number
+  readonly index: number
+}
+
+/** How to trigger USB re-enumeration from storage mode to modem mode */
+export type SwitchMethod = ScsiCbwSwitch | VendorControlSwitch
 
 /**
  * Result of vendor plugin identification.
@@ -124,7 +144,7 @@ export interface UsbModemEntry {
 }
 
 /** USB bus location, stable across PID changes (mode switching). */
-interface UsbLocation {
+export interface UsbLocation {
   /** USB bus number (host controller). */
   readonly busNumber: number
   /** USB port path (e.g. [1, 2] for port 1.2). Empty if unavailable. */
