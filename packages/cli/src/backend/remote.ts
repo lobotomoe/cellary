@@ -12,7 +12,6 @@ import type {
   AvailableNetwork,
   DataConnectionStatus,
   DeviceInfo,
-  DeviceObserverEvents,
   DeviceObserverOptions,
   DiscoveredModem,
   InteractiveStream,
@@ -31,6 +30,7 @@ import type {
   StkMenu,
   TrafficStats,
 } from 'cellary'
+import { NotSupportedError } from 'cellary'
 import { z } from 'zod'
 import {
   activeCallSchema,
@@ -68,16 +68,6 @@ import { DaemonClient } from '@cellary/daemon/client'
 async function validated<T>(promise: Promise<unknown>, schema: z.ZodType<T>): Promise<T> {
   const result = await promise
   return schema.parse(result)
-}
-
-// ── Device identity ─────────────────────────────────────────────────────────
-
-/** Compute stable device identity from a DiscoveredModem (mirrors core's deviceId function). */
-function computeDeviceId(modem: DiscoveredModem): string {
-  if (modem.mode === 'serial') return `serial:${modem.path}`
-  const portPath =
-    modem.portNumbers.length > 0 ? modem.portNumbers.join('.') : String(modem.productId)
-  return `${modem.vendorId}:${modem.busNumber}-${portPath}`
 }
 
 // ── RemoteDeviceHandle ──────────────────────────────────────────────────────
@@ -433,6 +423,10 @@ class RemoteDeviceHandle implements DeviceHandle {
       this._stkProxy.emit(stkEvent, data)
       return
     }
+    // EventEmitter throws on emit('error') when there is no 'error' listener.
+    // A forwarded modem error must never crash the CLI, so drop it when nobody
+    // is listening (the daemon retains the failure; this layer just relays).
+    if (event === 'error' && this._emitter.listenerCount('error') === 0) return
     this._emitter.emit(event, data)
   }
 
@@ -479,8 +473,10 @@ export class RemoteBackend implements Backend {
 
   async provision(target: DiscoveredModem): Promise<ProvisionResult> {
     const client = await this._ensureClient()
-    const id = computeDeviceId(target)
-    const partial = await validated(client.provision(id), provisionResultPartialSchema)
+    // Use the deviceId the daemon assigned (carried on the DiscoveredModem),
+    // not a locally re-derived one — re-deriving risks diverging from core's
+    // identity function and missing the daemon's device index.
+    const partial = await validated(client.provision(target.deviceId), provisionResultPartialSchema)
     // Reconstruct ProvisionResult with a minimal DeviceProfile.
     // The full profile (with AT config function fields) is not available over IPC --
     // the daemon holds the real profile internally. CLI commands never use it.
@@ -493,24 +489,14 @@ export class RemoteBackend implements Backend {
   }
 
   createWatcher(_options?: DeviceObserverOptions): DeviceWatcher {
-    // Remote watcher: subscribes to daemon lifecycle events.
-    // Basic implementation -- full event translation can be added later.
-    const emitter = new EventEmitter()
-    const watcher: DeviceWatcher = {
-      on<K extends keyof DeviceObserverEvents>(
-        event: K,
-        listener: (...args: DeviceObserverEvents[K]) => void,
-      ): void {
-        emitter.on(event, listener)
-      },
-      start: () => {
-        // Daemon already watches -- events arrive via subscription
-      },
-      dispose: () => {
-        emitter.removeAllListeners()
-      },
-    }
-    return watcher
+    // Not yet implemented for daemon mode: bridging the daemon's serialized
+    // lifecycle broadcasts back into the rich DeviceObserverEvents vocabulary
+    // (session + analysis objects) is non-trivial and pending. Fail loud rather
+    // than return a watcher that silently never emits.
+    throw new NotSupportedError(
+      'Live watch is not available via the daemon yet. Stop the daemon to use direct mode ' +
+        '(sudo cellary daemon stop), or watch the daemon logs instead.',
+    )
   }
 
   // ── Device connection ─────────────────────────────────────────────────────

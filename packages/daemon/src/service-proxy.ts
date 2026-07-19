@@ -347,6 +347,9 @@ export function dispatchServiceCall(
   params: unknown,
   resolveModem: ModemResolver,
 ): Promise<unknown> | undefined {
+  // Object.hasOwn, not `method in METHODS`, so inherited Object.prototype keys
+  // ('toString', 'constructor', '__proto__') are not mistaken for RPC methods.
+  if (!Object.hasOwn(METHODS, method)) return undefined
   const entry = METHODS[method]
   if (!entry) return undefined
 
@@ -357,5 +360,5 @@ export function dispatchServiceCall(
 
 /** Check if a method is a device service call (vs fleet/daemon method). */
 export function isServiceMethod(method: string): boolean {
-  return method in METHODS
+  return Object.hasOwn(METHODS, method)
 }

@@ -80,6 +80,8 @@ let streamManager: StreamManager
 
 const server = new IpcServer({
   socketPath,
+  socketGid: config.socketGid,
+  onWarning: (message) => log.warn(message),
 
   onRequest: async (method, params, clientId) => {
     // ── Fleet management ─────────────────────────────────────────────

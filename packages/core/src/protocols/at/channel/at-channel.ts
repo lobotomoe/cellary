@@ -281,6 +281,11 @@ export class ATChannel {
     // Catch write errors (e.g. transport closed after USB disconnect) and reject
     // the command promise so callers get a proper error instead of an unhandled rejection.
     this.transport.write(`${entry.command.raw}\r`).catch((err: unknown) => {
+      // A slow write can reject after this command already timed out and the
+      // queue advanced. If we're no longer the current entry, another command
+      // owns the channel state — touching it here would clear its timer and
+      // orphan its promise. The already-settled `entry` needs nothing further.
+      if (this.currentEntry !== entry) return
       this.clearTimer()
       this.state = 'idle'
       this.currentEntry = null
@@ -338,6 +343,9 @@ export class ATChannel {
       // Send PDU data followed by Ctrl-Z (0x1A)
       this.state = 'data_input'
       this.transport.write(`${promptData}\x1a`).catch((err: unknown) => {
+        // See the write-error handler in processQueue: guard against clobbering
+        // a different command if this rejects after `entry` was already settled.
+        if (this.currentEntry !== entry) return
         this.clearTimer()
         this.state = 'idle'
         this.currentEntry = null

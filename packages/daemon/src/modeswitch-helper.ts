@@ -18,12 +18,12 @@
  *
  * If cbw_hex is provided, sends that exact CBW instead of StandardEject.
  *
- * Writes result to /tmp/cellary-modeswitch-result.json and exits.
+ * Outcome is reported via exit code (0 = success) and a message on stderr,
+ * which the spawning parent (core's spawnModeswitchHelper) captures. It must
+ * NOT write to a predictable /tmp path: this process runs as root, and a
+ * world-writable directory invites a symlink attack (attacker pre-creates the
+ * path as a symlink to a root-owned file → root truncates the target).
  */
-
-import { writeFileSync } from 'node:fs'
-
-const RESULT_PATH = '/tmp/cellary-modeswitch-result.json'
 
 const SCSI_CBW_SIGNATURE = 0x43425355
 const SCSI_CSW_SIGNATURE = 0x53425355
@@ -32,13 +32,14 @@ const CSW_LENGTH = 13
 const INQUIRY_DATA_LENGTH = 36
 const TRANSFER_TIMEOUT_MS = 5000
 
-function writeResult(code: number, message: string): void {
-  writeFileSync(RESULT_PATH, JSON.stringify({ code, message }))
+function fatal(code: number, message: string): never {
+  process.stderr.write(`[modeswitch-helper] ${message}\n`)
+  process.exit(code)
 }
 
-function fatal(code: number, message: string): never {
-  writeResult(code, message)
-  process.exit(code)
+function succeed(message: string): never {
+  process.stderr.write(`[modeswitch-helper] ${message}\n`)
+  process.exit(0)
 }
 
 // ── Arg validation ──────────────────────────────────────────────────────────
@@ -241,8 +242,7 @@ try {
         const rawCbw = Buffer.from(rawCbwHex, 'hex')
         await sendCbw(rawCbw, 'vendor CBW')
         cleanup()
-        writeResult(0, 'Vendor CBW sent (device should re-enumerate)')
-        process.exit(0)
+        succeed('Vendor CBW sent (device should re-enumerate)')
       }
 
       // StandardEject sequence: INQUIRY → TUR → ALLOW → EJECT
@@ -282,8 +282,7 @@ try {
       )
 
       cleanup()
-      writeResult(0, 'StandardEject sequence completed (device should re-enumerate)')
-      process.exit(0)
+      succeed('StandardEject sequence completed (device should re-enumerate)')
     } catch (err: unknown) {
       cleanup()
       const message = err instanceof Error ? err.message : String(err)

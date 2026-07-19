@@ -5,7 +5,7 @@
  * Messages are newline-delimited JSON.
  */
 
-import { chmodSync, existsSync, unlinkSync } from 'node:fs'
+import { chmodSync, chownSync, existsSync, unlinkSync } from 'node:fs'
 import { createServer, type Server, type Socket } from 'node:net'
 
 import superjson from 'superjson'
@@ -28,6 +28,15 @@ const incomingNotificationSchema = z.object({
 /** Maximum buffer size per client (1 MB). Prevents runaway memory from malformed input. */
 const MAX_BUFFER_SIZE = 1_048_576
 
+/**
+ * Default socket permissions: owner + group read/write, no world access.
+ * The daemon runs as root, so without a group gid this restricts access to
+ * root only. A group gid (see {@link IpcServerOptions.socketGid}) widens it to
+ * an authorized operator group — the socket mode is the actual authorization
+ * boundary for this privileged daemon, so it must never be world-accessible.
+ */
+const DEFAULT_SOCKET_MODE = 0o660
+
 // ── Types ──────────────────────────────────────────────────────────────────
 
 export type RequestHandler = (method: string, params: unknown, clientId: string) => Promise<unknown>
@@ -36,6 +45,15 @@ export type NotificationHandler = (method: string, params: unknown, clientId: st
 
 export interface IpcServerOptions {
   readonly socketPath?: string | undefined
+  /**
+   * Numeric group id to chown the socket to, allowing non-root clients in that
+   * group to connect. When undefined, the socket stays owner-only (root).
+   */
+  readonly socketGid?: number | undefined
+  /** Socket file mode. Defaults to {@link DEFAULT_SOCKET_MODE} (0o660). */
+  readonly socketMode?: number | undefined
+  /** Called with a human-readable warning when the socket ACL may be too permissive/restrictive. */
+  readonly onWarning?: ((message: string) => void) | undefined
   readonly onRequest: RequestHandler
   readonly onNotification?: NotificationHandler | undefined
   readonly onClientConnected?: (clientId: string) => void
@@ -51,6 +69,9 @@ export interface ClientConnection {
 
 export class IpcServer {
   private readonly _socketPath: string
+  private readonly _socketGid: number | undefined
+  private readonly _socketMode: number
+  private readonly _onWarning: ((message: string) => void) | undefined
   private readonly _onRequest: RequestHandler
   private readonly _onNotification: NotificationHandler | undefined
   private readonly _onClientConnected: ((clientId: string) => void) | undefined
@@ -62,6 +83,9 @@ export class IpcServer {
 
   constructor(options: IpcServerOptions) {
     this._socketPath = options.socketPath ?? getSocketPath()
+    this._socketGid = options.socketGid
+    this._socketMode = options.socketMode ?? DEFAULT_SOCKET_MODE
+    this._onWarning = options.onWarning
     this._onRequest = options.onRequest
     this._onNotification = options.onNotification
     this._onClientConnected = options.onClientConnected
@@ -88,9 +112,21 @@ export class IpcServer {
       })
     })
 
-    // Allow any local user to connect (daemon runs as root, clients don't)
+    // Restrict socket access. The daemon runs as root; the socket mode is the
+    // authorization boundary, so it must never be world-accessible. A group gid
+    // (resolved by the installer) lets authorized non-root operators connect.
     if (process.platform !== 'win32') {
-      chmodSync(this._socketPath, 0o666)
+      chmodSync(this._socketPath, this._socketMode)
+      if (this._socketGid !== undefined) {
+        const uid = process.getuid?.() ?? 0
+        chownSync(this._socketPath, uid, this._socketGid)
+      } else {
+        this._onWarning?.(
+          `IPC socket ${this._socketPath} is restricted to the daemon owner (uid ` +
+            `${process.getuid?.() ?? 0}); non-root clients cannot connect. ` +
+            `Set CELLARY_SOCKET_GID to grant a group access.`,
+        )
+      }
     }
 
     this._server = server
@@ -150,15 +186,17 @@ export class IpcServer {
     socket.on('data', (chunk: Buffer) => {
       buffer += chunk.toString('utf-8')
 
-      // Guard against unbounded buffer growth (no newline = no message boundary)
+      // Guard against unbounded buffer growth (no newline = no message boundary).
+      // Once a frame exceeds the cap the stream is unframeable, so tear the
+      // connection down rather than truncating and desyncing all later frames.
       if (buffer.length > MAX_BUFFER_SIZE) {
-        buffer = ''
         const response: JsonRpcResponse = {
           jsonrpc: '2.0',
           id: null,
           error: { code: RPC_ERRORS.PARSE_ERROR, message: 'Message too large' },
         }
         writeLine(client.socket, response)
+        client.socket.destroy()
         return
       }
 

@@ -279,7 +279,19 @@ export class Modem extends EventEmitter {
     const modem = new Modem(adapters, model, reconnect, opts.plugin, log)
 
     if (opts.autoInit !== false) {
-      await modem.init(opts.onProgress)
+      try {
+        await modem.init(opts.onProgress)
+      } catch (err) {
+        // init failed but the transport is already open — tear it down so the
+        // caller can retry without hitting EBUSY on the port we still hold.
+        // 'open' was never emitted, so no external listener observes this close.
+        try {
+          await modem.close()
+        } catch (closeErr) {
+          log.error('Failed to close modem after init failure', { error: closeErr })
+        }
+        throw err
+      }
     }
 
     modem.emit('open')
@@ -377,34 +389,51 @@ export class Modem extends EventEmitter {
     const onProgress = options?.onProgress
 
     if (options?.autoInit !== false) {
-      onProgress?.({ phase: 'initializing', message: 'Initializing modem' })
-      await instance.init(onProgress)
+      try {
+        onProgress?.({ phase: 'initializing', message: 'Initializing modem' })
+        await instance.init(onProgress)
 
-      // Run preparation health checks after modem is live.
-      // Dynamic import keeps preparation code out of the main bundle
-      // when not using detect().
-      onProgress?.({ phase: 'checking', message: 'Running health checks' })
-      const { resolveProfile } = await import('./preparation/profiles.js')
-      const { runPreparation } = await import('./preparation/runner.js')
+        // Run preparation health checks after modem is live.
+        // Dynamic import keeps preparation code out of the main bundle
+        // when not using detect().
+        onProgress?.({ phase: 'checking', message: 'Running health checks' })
+        const { resolveProfile } = await import('./preparation/profiles.js')
+        const { runPreparation } = await import('./preparation/runner.js')
 
-      const transportVendor = prepared.transport.type === 'usb' ? prepared.transport.vendorId : 0
-      const transportProduct = prepared.transport.type === 'usb' ? prepared.transport.productId : 0
-      const deviceInfo = {
-        name: resolvedModel?.name ?? 'Unknown',
-        vendorId: transportVendor,
-        productId: transportProduct,
-      }
+        const transportVendor = prepared.transport.type === 'usb' ? prepared.transport.vendorId : 0
+        const transportProduct =
+          prepared.transport.type === 'usb' ? prepared.transport.productId : 0
+        const deviceInfo = {
+          name: resolvedModel?.name ?? 'Unknown',
+          vendorId: transportVendor,
+          productId: transportProduct,
+        }
 
-      const prepProfile = resolveProfile(deviceInfo, matchedPlugin, resolvedModel)
-      const remediationPolicy =
-        options?.remediation === false ? { autoApply: [] } : options?.remediation
-      const report = await runPreparation(instance, prepProfile, deviceInfo, log, remediationPolicy)
-      instance._report = report
+        const prepProfile = resolveProfile(deviceInfo, matchedPlugin, resolvedModel)
+        const remediationPolicy =
+          options?.remediation === false ? { autoApply: [] } : options?.remediation
+        const report = await runPreparation(
+          instance,
+          prepProfile,
+          deviceInfo,
+          log,
+          remediationPolicy,
+        )
+        instance._report = report
 
-      if (report.verdict === 'failed') {
-        // Close the modem — it's not usable. 'open' was never emitted.
-        await instance.close()
-        throw new PreparationError(report)
+        if (report.verdict === 'failed') {
+          throw new PreparationError(report)
+        }
+      } catch (err) {
+        // init or health checks failed after the transport was opened — tear it
+        // down (single close path for every failure, including 'failed' verdict)
+        // so a retry doesn't hit EBUSY. 'open' was never emitted.
+        try {
+          await instance.close()
+        } catch (closeErr) {
+          log.error('Failed to close modem after connect failure', { error: closeErr })
+        }
+        throw err
       }
     }
 

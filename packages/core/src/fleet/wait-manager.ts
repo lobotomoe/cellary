@@ -74,6 +74,7 @@ export class WaitManager {
         if (settled) return
         settled = true
         clearTimeout(timer)
+        this._deps.offReady(onReady)
         this._pending.delete(cancel)
         resolve(modem)
       }

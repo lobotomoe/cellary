@@ -1,8 +1,23 @@
 import { defineCommand, runMain } from 'citty'
 
-// Force exit on SIGINT. Without this, pending USB transfers (libusb)
-// keep the event loop alive and Ctrl+C doesn't terminate the process.
-process.on('SIGINT', () => process.exit(130))
+/** Grace period for command cleanup after Ctrl+C before we force-exit. */
+const FORCE_EXIT_GRACE_MS = 2000
+
+// SIGINT handling. Pending USB transfers (libusb) keep the event loop alive, so
+// a stuck process needs a force-exit escape hatch. But blindly exiting here also
+// kills command-registered cleanup (monitor alt-screen restore, watch teardown,
+// serial port close). So: if a command installed its own SIGINT handler, let it
+// own the shutdown and only force-exit as a delayed safety net (second Ctrl+C
+// exits now). With no command handler, exit immediately as before.
+let interrupting = false
+process.on('SIGINT', () => {
+  if (process.listenerCount('SIGINT') <= 1) {
+    process.exit(130)
+  }
+  if (interrupting) process.exit(130)
+  interrupting = true
+  setTimeout(() => process.exit(130), FORCE_EXIT_GRACE_MS).unref()
+})
 
 const main = defineCommand({
   meta: {

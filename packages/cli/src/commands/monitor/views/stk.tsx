@@ -85,11 +85,13 @@ export function StkView({ handle, active }: StkViewProps): React.JSX.Element {
       setTimeout(() => setStatus(undefined), 3000)
     }
 
-    stk.on('menu', (e: StkProactiveEvent) => onEvent(e))
-    stk.on('text', (e: StkProactiveEvent) => onEvent(e))
-    stk.on('input', (e: StkProactiveEvent) => onEvent(e))
-    stk.on('inkey', (e: StkProactiveEvent) => onEvent(e))
-    stk.on('notification', (e: StkProactiveEvent) => onEvent(e))
+    // Register onEvent by reference (not inline wrappers) so the off() calls in
+    // cleanup actually remove these listeners — otherwise each mount leaks five.
+    stk.on('menu', onEvent)
+    stk.on('text', onEvent)
+    stk.on('input', onEvent)
+    stk.on('inkey', onEvent)
+    stk.on('notification', onEvent)
     stk.on('session:end', onSessionEnd)
     stk.on('error', onError)
 
