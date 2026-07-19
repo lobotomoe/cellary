@@ -109,5 +109,12 @@ describe('decodePduDeliver()', () => {
     it('throws on truncated PDU', () => {
       expect(() => decodePduDeliver('0000')).toThrow('unexpected end of data')
     })
+
+    it('throws on GSM7 user data shorter than UDL (no fabricated @)', () => {
+      // Same header as "Hello world" but UDL=0x0B (11 septets, needs 10 octets)
+      // with only 2 UD octets. Must fail loud, not decode to "Hi@".
+      const pdu = '00000A9121436587090000423010210300800BC834'
+      expect(() => decodePduDeliver(pdu)).toThrow('truncated')
+    })
   })
 })

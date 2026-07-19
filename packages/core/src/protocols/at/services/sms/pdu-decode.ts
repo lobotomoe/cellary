@@ -525,6 +525,18 @@ function decodeGsm7(hex: string, septetCount: number, fillBits: number): string 
     bytes.push(Number.parseInt(hex.slice(i, i + 2), 16))
   }
 
+  // Fail loud on truncated user data rather than fabricating zero bits (which
+  // would materialize as spurious '@' characters — septet 0). A well-formed PDU
+  // carries exactly ceil((fillBits + septets*7) / 8) octets.
+  const requiredOctets = Math.ceil((fillBits + septetCount * GSM7_SEPTET_BITS) / 8)
+  if (bytes.length < requiredOctets) {
+    throw new ParseError(
+      `GSM7 user data truncated: ${septetCount} septets need ${requiredOctets} octets, ` +
+        `got ${bytes.length}`,
+      hex,
+    )
+  }
+
   // Unpack septets from bit stream
   let result = ''
   let bitOffset = fillBits
@@ -536,14 +548,20 @@ function decodeGsm7(hex: string, septetCount: number, fillBits: number): string 
 
     let septet: number
     const currentByte = bytes[byteIndex]
-    if (currentByte === undefined) break
+    if (currentByte === undefined) {
+      throw new ParseError(`GSM7 decode overran user data at septet ${i}`, hex)
+    }
 
     if (bitPos <= 1) {
       // Septet fits in one byte
       septet = (currentByte >> bitPos) & 0x7f
     } else {
-      // Septet spans two bytes
-      const nextByte = bytes[byteIndex + 1] ?? 0
+      // Septet spans two bytes. requiredOctets guarantees the next octet exists
+      // whenever a septet straddles the boundary, so a missing byte is a bug.
+      const nextByte = bytes[byteIndex + 1]
+      if (nextByte === undefined) {
+        throw new ParseError(`GSM7 decode overran user data at septet ${i}`, hex)
+      }
       const combined = currentByte | (nextByte << 8)
       septet = (combined >> bitPos) & 0x7f
     }

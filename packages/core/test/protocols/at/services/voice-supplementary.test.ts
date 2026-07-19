@@ -219,6 +219,31 @@ describe('VoiceModule -- call supplementary services', () => {
 
       await voice.setCallForwarding('unconditional', 'erase')
     })
+
+    it('places the no-reply timer in the <time> slot, not <satype>', async () => {
+      // TS 27.007 7.11 positional order: ...,<number>,<type>,<class>,<subaddr>,<satype>,<time>
+      // With no class, <class>/<subaddr>/<satype> are empty and <time> is last.
+      transport.autoRespond({
+        'AT+CCFC=2,3,"+37491112233",145,,,,20\r': '\r\nOK\r\n',
+      })
+
+      await voice.setCallForwarding('noReply', 'register', {
+        number: '+37491112233',
+        time: 20,
+      })
+    })
+
+    it('places <time> after <class> when a service class is given', async () => {
+      transport.autoRespond({
+        'AT+CCFC=2,3,"+37491112233",145,1,,,20\r': '\r\nOK\r\n',
+      })
+
+      await voice.setCallForwarding('noReply', 'register', {
+        number: '+37491112233',
+        serviceClass: 1,
+        time: 20,
+      })
+    })
   })
 
   // ── Call Waiting ─────────────────────────────────────────────────────

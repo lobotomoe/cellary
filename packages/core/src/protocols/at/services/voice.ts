@@ -236,22 +236,33 @@ export class VoiceModule implements Voice {
   ): Promise<void> {
     const reasonCode = REASON_TO_AT[reason]
     const modeCode = MODE_TO_AT[mode]
-    let cmd = `AT+CCFC=${reasonCode},${modeCode}`
-    if (options?.number !== undefined) {
-      const type = inferNumberType(options.number)
-      cmd += `,"${options.number}",${type}`
-      if (options.serviceClass !== undefined) {
-        cmd += `,${options.serviceClass}`
-      }
-      if (options.time !== undefined) {
-        // time parameter comes after subaddr,satype -- use empty placeholders
-        const classPart = options.serviceClass !== undefined ? '' : ','
-        cmd += `${classPart},,${options.time}`
-      }
-    } else if (options?.serviceClass !== undefined) {
-      cmd += `,,,${options.serviceClass}`
+
+    // TS 27.007 7.11 positional order:
+    //   AT+CCFC=<reason>,<mode>[,<number>[,<type>[,<class>[,<subaddr>[,<satype>[,<time>]]]]]]
+    // Absent-but-earlier params must be emitted as empty placeholders so later
+    // ones land in the right slot — e.g. <time> must not fall into <satype>.
+    const number = options?.number
+    const serviceClass = options?.serviceClass
+    const time = options?.time
+
+    const parts: string[] = [String(reasonCode), String(modeCode)]
+    if (number !== undefined || serviceClass !== undefined || time !== undefined) {
+      // <number>,<type>
+      parts.push(
+        number !== undefined ? `"${number}"` : '',
+        number !== undefined ? String(inferNumberType(number)) : '',
+      )
     }
-    await this.channel.execute(cmd)
+    if (serviceClass !== undefined || time !== undefined) {
+      // <class>
+      parts.push(serviceClass !== undefined ? String(serviceClass) : '')
+    }
+    if (time !== undefined) {
+      // <subaddr>,<satype>,<time>
+      parts.push('', '', String(time))
+    }
+
+    await this.channel.execute(`AT+CCFC=${parts.join(',')}`)
   }
 
   // ── CCWA (Section 7.12) ─────────────────────────────────────────────────
