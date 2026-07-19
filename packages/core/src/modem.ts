@@ -27,7 +27,7 @@ import type {
 } from './protocols/adapter.js'
 import { AtAdapter } from './protocols/at/index.js'
 import { genericProfile } from './protocols/at/profile.js'
-import { type ReconnectConfig, resolveReconnectConfig, startReconnectLoop } from './reconnector.js'
+import { type ReconnectConfig, ReconnectSupervisor, resolveReconnectConfig } from './reconnector.js'
 import { routeServices } from './service-router.js'
 import type {
   AvailableNetwork,
@@ -159,12 +159,10 @@ export class Modem extends EventEmitter {
 
   private readonly _adapters: readonly ProtocolAdapter[]
   private readonly _routeInfo: Readonly<Record<string, ServiceRouteInfo>>
-  private readonly _reconnect: ReconnectConfig
   private readonly _log: Logger
   /** Cleanup functions to remove event handlers we attached to adapters. */
   private readonly _eventCleanups: Array<() => void> = []
-  private _reconnectAbort: AbortController | undefined
-  private readonly _reconnectingAdapters = new Set<ProtocolAdapter>()
+  private readonly _supervisor: ReconnectSupervisor
   private _closed = false
   private _report: PrepReport | undefined
 
@@ -184,8 +182,25 @@ export class Modem extends EventEmitter {
     this._log = logger ?? noopLogger
     this._adapters = adapters
     this.model = model
-    this._reconnect = reconnect
     this.plugin = plugin
+
+    this._supervisor = new ReconnectSupervisor(reconnect, this._log, {
+      onFirstDisconnect: () => this.emit('disconnect'),
+      onReconnect: () => this.emit('reconnect'),
+      onFailed: (_adapter, attempts) => {
+        this.emit('reconnect:failed')
+        this.emit(
+          'error',
+          new TransportError(
+            `Reconnect failed after ${attempts} attempt${attempts === 1 ? '' : 's'}`,
+          ),
+        )
+      },
+      onError: (_adapter, err) => {
+        this.emit('error', err instanceof Error ? err : new TransportError('Reconnect loop failed'))
+      },
+      isClosed: () => this._closed,
+    })
 
     this._log.info('Modem created', { protocols: adapters.map((a) => a.kind), model: model?.name })
 
@@ -228,15 +243,10 @@ export class Modem extends EventEmitter {
     for (const adapter of adapters) {
       adapter.onDisconnect?.(() => {
         if (this._closed) return
-        if (this._reconnectingAdapters.has(adapter)) return
+        if (this._supervisor.isReconnecting(adapter)) return
         if (reconnect.enabled) {
-          this._startReconnect(adapter).catch((err: unknown) => {
-            this._reconnectingAdapters.delete(adapter)
-            this.emit(
-              'error',
-              err instanceof Error ? err : new TransportError('Reconnect loop failed'),
-            )
-          })
+          this._log.warn('Transport disconnected', { adapter: adapter.kind })
+          this._supervisor.start(adapter)
         } else {
           this.emit('disconnect')
         }
@@ -448,9 +458,10 @@ export class Modem extends EventEmitter {
   async close(): Promise<void> {
     this._closed = true
 
-    // Cancel any in-flight reconnect loop immediately
-    this._reconnectAbort?.abort()
-    this._reconnectAbort = undefined
+    // Abort every in-flight reconnect loop AND wait for them to settle before
+    // touching the adapters — otherwise a loop mid-reopen() would re-open the
+    // transport we are about to close, leaking the port.
+    await this._supervisor.shutdown()
 
     this.stk.disable()
 
@@ -584,37 +595,6 @@ export class Modem extends EventEmitter {
     adapter.on(fromEvent, handler)
     this._eventCleanups.push(() => {
       adapter.removeListener(fromEvent, handler)
-    })
-  }
-
-  private async _startReconnect(adapter: ProtocolAdapter): Promise<void> {
-    this._reconnectingAdapters.add(adapter)
-    this._log.warn('Transport disconnected', { adapter: adapter.kind })
-
-    // Emit disconnect only for the first adapter entering the reconnect loop
-    if (this._reconnectingAdapters.size === 1) {
-      this.emit('disconnect')
-    }
-
-    const abort = new AbortController()
-    this._reconnectAbort = abort
-
-    await startReconnectLoop(adapter, this._reconnect, this._log, abort, {
-      onReconnect: () => {
-        this._reconnectingAdapters.delete(adapter)
-        this.emit('reconnect')
-      },
-      onFailed: (_adapter, attempts) => {
-        this._reconnectingAdapters.delete(adapter)
-        this.emit('reconnect:failed')
-        this.emit(
-          'error',
-          new TransportError(
-            `Reconnect failed after ${attempts} attempt${attempts === 1 ? '' : 's'}`,
-          ),
-        )
-      },
-      isClosed: () => this._closed,
     })
   }
 
