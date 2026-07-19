@@ -24,6 +24,9 @@ const PDU_MULTI_P2 =
   '00400B919700214365F70008521051900000001A0500032A0202' +
   '00200063006F006E00740069006E007500650073'
 
+// Stored SENT message (SMS-SUBMIT): "Hi" to +1234567890, GSM 7-bit, no timestamp
+const PDU_SUBMIT = '0001000A912143658709000002C834'
+
 describe('SmsModule', () => {
   let transport: MockTransport
   let channel: ATChannel
@@ -62,13 +65,49 @@ describe('SmsModule', () => {
       // Sorted by timestamp descending: Test msg (2025) before Hello world (2024)
       expect(messages[0]?.index).toBe(1)
       expect(messages[0]?.status).toBe('unread')
-      expect(messages[0]?.from).toBe('+5551234')
+      expect(messages[0]?.address).toBe('+5551234')
       expect(messages[0]?.text).toBe('Test msg')
 
       expect(messages[1]?.index).toBe(0)
       expect(messages[1]?.status).toBe('read')
-      expect(messages[1]?.from).toBe('+1234567890')
+      expect(messages[1]?.address).toBe('+1234567890')
       expect(messages[1]?.text).toBe('Hello world')
+    })
+
+    it('decodes a stored sent message (SMS-SUBMIT) as outgoing without throwing', async () => {
+      transport.autoRespond({
+        'AT+CMGF=0\r': '\r\nOK\r\n',
+        'AT+CMGL=4\r': `\r\n+CMGL: 5,3,,14\r\n${PDU_SUBMIT}\r\n\r\nOK\r\n`,
+      })
+
+      const messages = await sms.list('all')
+      expect(messages).toHaveLength(1)
+      expect(messages[0]?.direction).toBe('outgoing')
+      expect(messages[0]?.status).toBe('sent')
+      expect(messages[0]?.address).toBe('+1234567890') // recipient, not sender
+      expect(messages[0]?.text).toBe('Hi')
+      expect(messages[0]?.timestamp).toBeUndefined()
+    })
+
+    it('lists received messages even when a sent message is also stored', async () => {
+      // A stored SMS-SUBMIT must not make the whole listing throw (SMS-C1).
+      transport.autoRespond({
+        'AT+CMGF=0\r': '\r\nOK\r\n',
+        'AT+CMGL=4\r': [
+          '\r\n+CMGL: 0,1,,28\r\n',
+          `${PDU_HELLO}\r\n`,
+          '+CMGL: 5,3,,14\r\n',
+          `${PDU_SUBMIT}\r\n`,
+          '\r\nOK\r\n',
+        ].join(''),
+      })
+
+      const messages = await sms.list('all')
+      expect(messages).toHaveLength(2)
+      expect(messages.some((m) => m.direction === 'incoming' && m.text === 'Hello world')).toBe(
+        true,
+      )
+      expect(messages.some((m) => m.direction === 'outgoing' && m.text === 'Hi')).toBe(true)
     })
 
     it('sends correct status code for unread (0)', async () => {
@@ -108,7 +147,7 @@ describe('SmsModule', () => {
       })
 
       const messages = await sms.list()
-      expect(messages[0]?.from).toBe('+79001234567')
+      expect(messages[0]?.address).toBe('+79001234567')
       expect(messages[0]?.text).toBe('\u041F\u0440\u0438\u0432\u0435\u0442')
     })
 
@@ -128,7 +167,7 @@ describe('SmsModule', () => {
 
       // Two PDU segments should become one assembled message
       expect(messages).toHaveLength(1)
-      expect(messages[0]?.from).toBe('+79001234567')
+      expect(messages[0]?.address).toBe('+79001234567')
       expect(messages[0]?.text).toBe('Part one text here continues')
       // Index of the first received segment
       expect(messages[0]?.index).toBe(5)
@@ -164,7 +203,7 @@ describe('SmsModule', () => {
       const msg = await sms.read(3)
       expect(msg.index).toBe(3)
       expect(msg.status).toBe('read')
-      expect(msg.from).toBe('+1234567890')
+      expect(msg.address).toBe('+1234567890')
       expect(msg.text).toBe('Hello world')
     })
 
@@ -185,7 +224,7 @@ describe('SmsModule', () => {
 
       const msg = await sms.read(0)
       expect(msg.status).toBe('unread')
-      expect(msg.from).toBe('+5551234')
+      expect(msg.address).toBe('+5551234')
     })
 
     it('decodes UCS-2 PDU in read', async () => {

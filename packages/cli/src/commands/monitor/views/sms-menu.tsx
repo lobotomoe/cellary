@@ -14,13 +14,13 @@ type InboxItem =
   | { readonly source: 'sim'; readonly msg: SmsMessage }
   | { readonly source: 'archive'; readonly msg: ArchivedMessage }
 
-function itemTimestamp(item: InboxItem): Date {
+function itemTimestamp(item: InboxItem): Date | undefined {
   if (item.source === 'sim') return item.msg.timestamp
-  return new Date(item.msg.timestamp)
+  return item.msg.timestamp !== '' ? new Date(item.msg.timestamp) : undefined
 }
 
 function itemFrom(item: InboxItem): string {
-  return item.msg.from
+  return item.source === 'sim' ? item.msg.address : item.msg.from
 }
 
 function itemText(item: InboxItem): string {
@@ -36,7 +36,8 @@ function itemKey(item: InboxItem): string {
   return `arc-${item.msg.id}`
 }
 
-function formatShortDate(date: Date): string {
+function formatShortDate(date: Date | undefined): string {
+  if (date === undefined) return '  --  '
   const month = String(date.getMonth() + 1).padStart(2, '0')
   const day = String(date.getDate()).padStart(2, '0')
   const hours = String(date.getHours()).padStart(2, '0')
@@ -153,7 +154,7 @@ export function SmsInbox({
     const simItems: InboxItem[] = simMessages.map((msg) => ({ source: 'sim', msg }))
     const archiveItems: InboxItem[] = archivedMessages.map((msg) => ({ source: 'archive', msg }))
     const all = [...simItems, ...archiveItems]
-    all.sort((a, b) => itemTimestamp(b).getTime() - itemTimestamp(a).getTime())
+    all.sort((a, b) => (itemTimestamp(b)?.getTime() ?? 0) - (itemTimestamp(a)?.getTime() ?? 0))
     return all
   }, [simMessages, archivedMessages])
 
@@ -209,7 +210,7 @@ export function SmsInbox({
         if (item === undefined || item.source !== 'sim') return
         const msg = item.msg
         store.archiveMessage({
-          from: msg.from,
+          from: msg.address,
           text: msg.text,
           timestamp: msg.timestamp,
           status: msg.status,
@@ -369,7 +370,7 @@ export function SmsRead({
       }
       if (input === 'a' && !deleting && message !== undefined) {
         store.archiveMessage({
-          from: message.from,
+          from: message.address,
           text: message.text,
           timestamp: message.timestamp,
           status: message.status,
@@ -433,12 +434,12 @@ export function SmsRead({
       </Text>
       <Text> </Text>
       <Text>
-        <Text dimColor>{'  From:  '}</Text>
-        <Text bold>{message.from}</Text>
+        <Text dimColor>{message.direction === 'outgoing' ? '  To:    ' : '  From:  '}</Text>
+        <Text bold>{message.address}</Text>
       </Text>
       <Text>
         <Text dimColor>{'  Date:  '}</Text>
-        <Text>{message.timestamp.toLocaleString()}</Text>
+        <Text>{message.timestamp !== undefined ? message.timestamp.toLocaleString() : '--'}</Text>
       </Text>
       <Text> </Text>
       <Text>

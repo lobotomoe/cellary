@@ -8,9 +8,20 @@ export interface SmsNotification {
 
 export interface SmsMessage {
   readonly index: number
-  readonly from: string
+  /**
+   * Peer address: the sender for incoming messages, the recipient for stored
+   * outgoing (sent/unsent) messages. Interpret via `direction`.
+   */
+  readonly address: string
+  /** Message direction. Incoming = SMS-DELIVER, outgoing = stored SMS-SUBMIT. */
+  readonly direction: 'incoming' | 'outgoing'
   readonly text: string
-  readonly timestamp: Date
+  /**
+   * Service-centre timestamp for incoming messages. Absent for stored outgoing
+   * messages — SMS-SUBMIT PDUs carry no timestamp, and fabricating one would be
+   * a lie.
+   */
+  readonly timestamp?: Date | undefined
   readonly status: 'unread' | 'read' | 'sent' | 'unsent'
 }
 

@@ -5,7 +5,7 @@ import type { ATChannel } from '../../channel/at-channel.js'
 import { isGsm7BitCompatible } from '../../gsm7.js'
 import type { AtConfig } from '../../types.js'
 import { encodePduSubmit } from './pdu.js'
-import { type ConcatInfo, type DecodedPdu, decodePduDeliver } from './pdu-decode.js'
+import { type ConcatInfo, decodeStoredMessage, type StoredMessage } from './pdu-decode.js'
 
 // ─── PDU mode status codes (3GPP TS 27.005 section 3.1) ────────────────────
 
@@ -39,7 +39,7 @@ const CPMS_REGEX = /\+CPMS:\s*"[^"]*",(\d+),(\d+)/
 interface DecodedSegment {
   readonly index: number
   readonly status: SmsMessage['status']
-  readonly pdu: DecodedPdu
+  readonly message: StoredMessage
 }
 
 /** SMS send, receive, read, delete */
@@ -160,12 +160,19 @@ export class SmsModule implements Sms {
       if (pduLine === undefined || pduLine.startsWith('+CMGL:')) continue
       i++ // skip PDU line in next iteration
 
-      const pdu = decodePduDeliver(pduLine)
+      // Skip (don't fail the whole listing on) an unsupported or malformed PDU,
+      // e.g. a stored status report. read() surfaces such failures instead.
+      let message: StoredMessage
+      try {
+        message = decodeStoredMessage(pduLine)
+      } catch {
+        continue
+      }
 
       segments.push({
         index: Number.parseInt(indexStr, 10),
         status: msgStatus,
-        pdu,
+        message,
       })
     }
 
@@ -207,15 +214,7 @@ export class SmsModule implements Sms {
       throw new ParseError(`No PDU data for SMS at index ${index}`, result.lines.join('\n'))
     }
 
-    const pdu = decodePduDeliver(pduLine)
-
-    return {
-      index,
-      status: msgStatus,
-      from: pdu.sender,
-      text: pdu.text,
-      timestamp: pdu.timestamp,
-    }
+    return toSmsMessage(index, msgStatus, decodeStoredMessage(pduLine))
   }
 
   /** Delete a single SMS by index */
@@ -251,69 +250,82 @@ export class SmsModule implements Sms {
 
 // ─── Multipart Reassembly ───────────────────────────────────────────────────
 
+/** Build an SmsMessage from a decoded stored PDU and its storage status. */
+function toSmsMessage(
+  index: number,
+  status: SmsMessage['status'],
+  message: StoredMessage,
+): SmsMessage {
+  return {
+    index,
+    address: message.address,
+    direction: message.kind,
+    text: message.text,
+    timestamp: message.kind === 'incoming' ? message.timestamp : undefined,
+    status,
+  }
+}
+
 /**
- * Group concat key: sender + reference number.
- * Messages from different senders with the same ref are separate messages.
+ * Group concat key: peer address + reference number.
+ * Messages from different peers with the same ref are separate messages.
  */
-function concatKey(sender: string, concat: ConcatInfo): string {
-  return `${sender}:${concat.reference}`
+function concatKey(address: string, concat: ConcatInfo): string {
+  return `${address}:${concat.reference}`
 }
 
 /** Intermediate accumulator for multipart assembly */
 interface MultipartGroup {
-  readonly sender: string
+  readonly address: string
+  readonly direction: SmsMessage['direction']
   readonly status: SmsMessage['status']
   readonly firstIndex: number
   readonly concat: ConcatInfo
-  readonly parts: Map<number, { text: string; timestamp: Date }>
+  readonly parts: Map<number, { text: string; timestamp: Date | undefined }>
 }
 
 /**
  * Assemble decoded segments into SmsMessages.
  *
  * Single-part messages pass through directly.
- * Multipart segments are grouped by sender + concat reference,
+ * Multipart segments are grouped by peer address + concat reference,
  * sorted by part number, and joined into a single message.
  *
  * The assembled message uses:
  * - index of the first received segment (for deletion/reference)
- * - timestamp of the first part (part 1)
- * - status of the first received segment
+ * - timestamp of part 1 (undefined if part 1 is missing or the message is
+ *   outgoing — never fabricated)
+ * - status/direction of the first received segment
  */
 function assembleMessages(segments: readonly DecodedSegment[]): SmsMessage[] {
   const singles: SmsMessage[] = []
   const groups = new Map<string, MultipartGroup>()
 
   for (const seg of segments) {
-    if (seg.pdu.concat === undefined) {
-      // Single-part message
-      singles.push({
-        index: seg.index,
-        status: seg.status,
-        from: seg.pdu.sender,
-        text: seg.pdu.text,
-        timestamp: seg.pdu.timestamp,
-      })
+    const { message } = seg
+    if (message.concat === undefined) {
+      singles.push(toSmsMessage(seg.index, seg.status, message))
       continue
     }
 
-    const key = concatKey(seg.pdu.sender, seg.pdu.concat)
+    const key = concatKey(message.address, message.concat)
     let group = groups.get(key)
 
     if (group === undefined) {
       group = {
-        sender: seg.pdu.sender,
+        address: message.address,
+        direction: message.kind,
         status: seg.status,
         firstIndex: seg.index,
-        concat: seg.pdu.concat,
+        concat: message.concat,
         parts: new Map(),
       }
       groups.set(key, group)
     }
 
-    group.parts.set(seg.pdu.concat.partNumber, {
-      text: seg.pdu.text,
-      timestamp: seg.pdu.timestamp,
+    group.parts.set(message.concat.partNumber, {
+      text: message.text,
+      timestamp: message.kind === 'incoming' ? message.timestamp : undefined,
     })
   }
 
@@ -337,15 +349,17 @@ function assembleMessages(segments: readonly DecodedSegment[]): SmsMessage[] {
 
     assembled.push({
       index: group.firstIndex,
-      status: group.status,
-      from: group.sender,
+      address: group.address,
+      direction: group.direction,
       text: sortedParts.join(''),
-      timestamp: timestamp ?? new Date(),
+      timestamp,
+      status: group.status,
     })
   }
 
   const all = [...singles, ...assembled]
-  // Sort by timestamp descending (newest first)
-  all.sort((a, b) => b.timestamp.getTime() - a.timestamp.getTime())
+  // Sort by timestamp descending (newest first); messages without a timestamp
+  // (stored outgoing) sort last.
+  all.sort((a, b) => (b.timestamp?.getTime() ?? 0) - (a.timestamp?.getTime() ?? 0))
   return all
 }

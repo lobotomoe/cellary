@@ -44,11 +44,12 @@ export default defineCommand({
           return
         }
 
-        const headers = ['#', 'Status', 'From', 'Date', 'Text']
+        // Peer = sender for incoming, recipient for outgoing (status conveys which).
+        const headers = ['#', 'Status', 'Peer', 'Date', 'Text']
         const rows = messages.map((m) => [
           String(m.index),
           m.status,
-          m.from,
+          m.address,
           formatTimestamp(m.timestamp),
           truncate(m.text, 40),
         ])
@@ -60,7 +61,8 @@ export default defineCommand({
   },
 })
 
-function formatTimestamp(date: Date): string {
+function formatTimestamp(date: Date | undefined): string {
+  if (date === undefined) return '-'
   const y = date.getFullYear()
   const mo = String(date.getMonth() + 1).padStart(2, '0')
   const d = String(date.getDate()).padStart(2, '0')

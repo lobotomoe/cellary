@@ -26,7 +26,8 @@ export interface MessageStore {
   archiveMessage(msg: {
     from: string
     text: string
-    timestamp: Date
+    /** Absent for stored outgoing messages (SMS-SUBMIT carries no timestamp). */
+    timestamp: Date | undefined
     status: string
     storage: string
   }): number

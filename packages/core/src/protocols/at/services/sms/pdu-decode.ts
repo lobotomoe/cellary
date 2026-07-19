@@ -52,8 +52,13 @@ const TON_ALPHANUMERIC = 0xd0
 const IEI_CONCAT_8BIT = 0x00
 const IEI_CONCAT_16BIT = 0x08
 
-// TP-MTI mask (bits 0-1 of first octet)
+// TP-MTI values (bits 0-1 of first octet)
 const MTI_DELIVER = 0x00
+const MTI_SUBMIT = 0x01
+
+// TP-VPF values (bits 3-4 of the SMS-SUBMIT type octet)
+const VPF_NONE = 0x00
+const VPF_RELATIVE = 0x02
 
 // TP-UDHI flag (bit 6 of first octet)
 const UDHI_BIT = 0x40
@@ -106,38 +111,170 @@ export function decodePduDeliver(hex: string): DecodedPdu {
   const udl = reader.readByte()
 
   // 8. User Data (with optional UDH)
-  let concat: ConcatInfo | undefined
-  let text: string
-
-  if (hasUdhi) {
-    const udhLength = reader.readByte()
-    const udhEnd = reader.position + udhLength * 2 // in hex chars
-    concat = parseUdhConcat(reader, udhEnd)
-
-    // Skip remaining UDH IEs we don't understand
-    reader.seekTo(udhEnd)
-
-    if (encoding === 'gsm7') {
-      // UDH occupies ceil((udhLength + 1) * 8 / 7) septets
-      const udhBits = (udhLength + 1) * 8
-      const udhSeptets = Math.ceil(udhBits / GSM7_SEPTET_BITS)
-      const dataSeptets = udl - udhSeptets
-      // Fill bits: padding after UDH to align to septet boundary
-      const fillBits = udhSeptets * GSM7_SEPTET_BITS - udhBits
-      text = decodeGsm7(reader.remaining(), dataSeptets, fillBits)
-    } else {
-      const dataOctets = udl - (udhLength + 1)
-      text = decodeUcs2(reader, dataOctets)
-    }
-  } else {
-    if (encoding === 'gsm7') {
-      text = decodeGsm7(reader.remaining(), udl, 0)
-    } else {
-      text = decodeUcs2(reader, udl)
-    }
-  }
+  const { text, concat } = decodeUserData(reader, udl, encoding, hasUdhi)
 
   return { sender, text, timestamp, encoding, concat }
+}
+
+/** Decoded SMS-SUBMIT PDU (a stored sent/unsent message). */
+export interface DecodedSubmit {
+  /** Destination address (recipient phone number) */
+  readonly recipient: string
+  /** Decoded message text */
+  readonly text: string
+  /** Data coding scheme indicator */
+  readonly encoding: 'gsm7' | 'ucs2'
+  /** Concatenation info (present only for multipart segments) */
+  readonly concat?: ConcatInfo | undefined
+}
+
+/**
+ * Decode an SMS-SUBMIT PDU hex string (3GPP TS 23.040 section 9.2.2.2).
+ *
+ * Layout: [SCA] [PDU_TYPE] [MR] [DA] [PID] [DCS] [VP] [UDL] [UD]
+ * Unlike SMS-DELIVER there is no SCTS timestamp; the address is the recipient
+ * (DA) and a validity period may precede the user data depending on TP-VPF.
+ */
+export function decodePduSubmit(hex: string): DecodedSubmit {
+  const reader = createHexReader(hex)
+
+  // 1. Service Centre Address
+  const scaLength = reader.readByte()
+  if (scaLength > 0) {
+    reader.skip(scaLength)
+  }
+
+  // 2. PDU type octet
+  const pduType = reader.readByte()
+  const mti = pduType & 0x03
+  if (mti !== MTI_SUBMIT) {
+    throw new ParseError(`Expected SMS-SUBMIT (MTI=1), got MTI=${mti}`, hex)
+  }
+  const hasUdhi = (pduType & UDHI_BIT) !== 0
+  const vpf = (pduType >> 3) & 0x03
+
+  // 3. Message Reference (skip)
+  reader.skip(1)
+
+  // 4. Destination Address
+  const recipient = readAddress(reader)
+
+  // 5. Protocol Identifier (skip)
+  reader.skip(1)
+
+  // 6. Data Coding Scheme
+  const encoding = parseDcs(reader.readByte())
+
+  // 7. Validity Period — length depends on TP-VPF (bits 3-4 of the type octet):
+  //    0 = none, 1 = enhanced (7 octets), 2 = relative (1 octet), 3 = absolute (7).
+  let vpOctets = 7 // enhanced (1) or absolute (3)
+  if (vpf === VPF_NONE) {
+    vpOctets = 0
+  } else if (vpf === VPF_RELATIVE) {
+    vpOctets = 1
+  }
+  if (vpOctets > 0) {
+    reader.skip(vpOctets)
+  }
+
+  // 8. User Data Length + User Data
+  const udl = reader.readByte()
+  const { text, concat } = decodeUserData(reader, udl, encoding, hasUdhi)
+
+  return { recipient, text, encoding, concat }
+}
+
+/** A stored SMS decoded from either an SMS-DELIVER or SMS-SUBMIT PDU. */
+export type StoredMessage =
+  | {
+      readonly kind: 'incoming'
+      readonly address: string
+      readonly text: string
+      readonly timestamp: Date
+      readonly concat: ConcatInfo | undefined
+    }
+  | {
+      readonly kind: 'outgoing'
+      readonly address: string
+      readonly text: string
+      readonly concat: ConcatInfo | undefined
+    }
+
+/**
+ * Decode a stored SMS PDU, dispatching on TP-MTI.
+ *
+ * Handles SMS-DELIVER (incoming) and SMS-SUBMIT (outgoing / stored sent).
+ * Throws for SMS-STATUS-REPORT and any other type — callers listing a mailbox
+ * should skip on error so one unsupported PDU doesn't hide the rest, while a
+ * single-message read should surface the failure.
+ */
+export function decodeStoredMessage(hex: string): StoredMessage {
+  const mti = peekMti(hex)
+  if (mti === MTI_DELIVER) {
+    const d = decodePduDeliver(hex)
+    return {
+      kind: 'incoming',
+      address: d.sender,
+      text: d.text,
+      timestamp: d.timestamp,
+      concat: d.concat,
+    }
+  }
+  if (mti === MTI_SUBMIT) {
+    const s = decodePduSubmit(hex)
+    return { kind: 'outgoing', address: s.recipient, text: s.text, concat: s.concat }
+  }
+  throw new ParseError(
+    `Unsupported SMS PDU type (MTI=${mti}); only DELIVER and SUBMIT are decoded`,
+    hex,
+  )
+}
+
+/** Read TP-MTI (bits 0-1 of the PDU type octet) without decoding the whole PDU. */
+function peekMti(hex: string): number {
+  const reader = createHexReader(hex)
+  const scaLength = reader.readByte()
+  if (scaLength > 0) {
+    reader.skip(scaLength)
+  }
+  return reader.readByte() & 0x03
+}
+
+/**
+ * Decode the TP-UD field (with optional UDH), shared by DELIVER and SUBMIT.
+ * The reader must be positioned at the first octet after TP-UDL.
+ */
+function decodeUserData(
+  reader: HexReader,
+  udl: number,
+  encoding: 'gsm7' | 'ucs2',
+  hasUdhi: boolean,
+): { text: string; concat: ConcatInfo | undefined } {
+  if (!hasUdhi) {
+    const text =
+      encoding === 'gsm7' ? decodeGsm7(reader.remaining(), udl, 0) : decodeUcs2(reader, udl)
+    return { text, concat: undefined }
+  }
+
+  const udhLength = reader.readByte()
+  const udhEnd = reader.position + udhLength * 2 // in hex chars
+  const concat = parseUdhConcat(reader, udhEnd)
+
+  // Skip remaining UDH IEs we don't understand
+  reader.seekTo(udhEnd)
+
+  if (encoding === 'gsm7') {
+    // UDH occupies ceil((udhLength + 1) * 8 / 7) septets
+    const udhBits = (udhLength + 1) * 8
+    const udhSeptets = Math.ceil(udhBits / GSM7_SEPTET_BITS)
+    const dataSeptets = udl - udhSeptets
+    // Fill bits: padding after UDH to align to septet boundary
+    const fillBits = udhSeptets * GSM7_SEPTET_BITS - udhBits
+    return { text: decodeGsm7(reader.remaining(), dataSeptets, fillBits), concat }
+  }
+
+  const dataOctets = udl - (udhLength + 1)
+  return { text: decodeUcs2(reader, dataOctets), concat }
 }
 
 // ─── Hex Reader ─────────────────────────────────────────────────────────────

@@ -125,7 +125,7 @@ export function useModemEvents(handle: DeviceHandle): {
           addEntryRef.current({
             timestamp: ts,
             type: 'sms',
-            message: `${msg.from} (${storageLabel}): ${preview}`,
+            message: `${msg.address} (${storageLabel}): ${preview}`,
           })
         })
         .catch(() => {

@@ -61,9 +61,11 @@ export const availableNetworkSchema = z.object({
 
 export const smsMessageSchema = z.object({
   index: z.number(),
-  from: z.string(),
+  address: z.string(),
+  direction: z.enum(['incoming', 'outgoing']),
   text: z.string(),
-  timestamp: z.date(),
+  // Absent for stored outgoing messages (SMS-SUBMIT has no timestamp).
+  timestamp: z.date().optional(),
   status: z.enum(['unread', 'read', 'sent', 'unsent']),
 })
 

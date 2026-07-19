@@ -145,7 +145,9 @@ export function openStore(dbPath?: string): MessageStore {
       const result = insertMsg.run({
         sender: msg.from,
         text: msg.text,
-        timestamp: msg.timestamp.toISOString(),
+        // Empty string marks an unknown timestamp (stored outgoing message);
+        // the column is NOT NULL and callers render '' as "no date".
+        timestamp: msg.timestamp?.toISOString() ?? '',
         status: msg.status,
         storage: msg.storage,
       })
