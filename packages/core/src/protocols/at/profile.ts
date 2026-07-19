@@ -12,7 +12,9 @@ export const genericProfile: DeviceProfile = {
 
   at: {
     initCommands: [
-      'ATE0', // Disable echo — critical for parser sanity
+      'ATE1', // Enable echo — the echo delimits each command's response, letting
+      //          the channel resync after a timeout (a late response cannot then
+      //          resolve the next command). The parser strips echoes.
       'AT+CMEE=1', // Enable numeric CME error codes
       'AT+CMGF=0', // PDU mode for SMS (more reliable, supports multipart)
       'AT+CNMI=2,1,0,0,0', // Route new SMS notifications as +CMTI URCs

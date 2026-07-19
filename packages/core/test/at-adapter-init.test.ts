@@ -114,7 +114,7 @@ describe('AtAdapter.init()', () => {
     const commands = ['CMD1', 'CMD2', 'CMD3', 'CMD4', 'CMD5', 'CMD6']
     const { adapter, transport } = await createAdapter(commands, {
       // CMD1: no response (timeout 1)
-      'CMD2\r': '\r\nOK\r\n', // resets count
+      'CMD2\r': 'CMD2\r\nOK\r\n', // echo (ATE1) resyncs after CMD1's timeout, then OK resets count
       // CMD3: no response (timeout 1)
       // CMD4: no response (timeout 2)
       // CMD5: no response (timeout 3) -> break

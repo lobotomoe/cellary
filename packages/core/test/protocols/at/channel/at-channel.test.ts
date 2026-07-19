@@ -107,16 +107,58 @@ describe('ATChannel', () => {
       await expect(promise).rejects.toThrow(TimeoutError)
     })
 
-    it('processes next command after timeout', async () => {
+    it('processes next command after timeout (resync on echo)', async () => {
       const p1 = channel.execute('AT+SLOW', { timeout: 50 })
       const p2 = channel.execute('AT')
 
       await expect(p1).rejects.toThrow(TimeoutError)
 
-      // Second command should now be in flight
-      transport.receive('\r\nOK\r\n')
+      // Echo is on: p2's echo re-aligns the channel after the timeout, then its
+      // OK resolves it. A bare OK (no echo) would be treated as p1's late
+      // response and discarded — see the AT-C1 tests below.
+      transport.receive('AT\r\nOK\r\n')
       const r2 = await p2
       expect(r2.status.type).toBe('ok')
+    })
+
+    it('discards a timed-out command late response instead of resolving the next (AT-C1)', async () => {
+      const p1 = channel.execute('AT+SLOW', { timeout: 50 })
+      const p2 = channel.execute('AT+CSQ')
+      await expect(p1).rejects.toThrow(TimeoutError)
+
+      // p1's late response arrives first (no echo — it is stale). It must not
+      // resolve or pollute p2.
+      transport.receive('\r\n+SLOW: 1\r\n\r\nOK\r\n')
+
+      let settled = false
+      p2.then(() => {
+        settled = true
+      }).catch(() => {
+        settled = true
+      })
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(settled).toBe(false)
+
+      // p2's own echo resyncs, then its response resolves it with p2's data.
+      transport.receive('AT+CSQ\r\n+CSQ: 5,99\r\n\r\nOK\r\n')
+      const r2 = await p2
+      expect(r2.lines).toEqual(['+CSQ: 5,99'])
+    })
+
+    it('gives up resyncing if the next command also times out (non-echoing device)', async () => {
+      // A device that does not echo would otherwise wedge every command after a
+      // timeout. After one command times out while resyncing, the channel stops
+      // discarding so a later response resolves normally.
+      const p1 = channel.execute('AT+A', { timeout: 40 })
+      await expect(p1).rejects.toThrow(TimeoutError)
+      const p2 = channel.execute('AT+B', { timeout: 40 })
+      await expect(p2).rejects.toThrow(TimeoutError)
+
+      const p3 = channel.execute('AT+CSQ')
+      // Bare response, no echo — must still resolve p3 (resync was abandoned).
+      transport.receive('\r\n+CSQ: 7,99\r\n\r\nOK\r\n')
+      const r3 = await p3
+      expect(r3.lines).toEqual(['+CSQ: 7,99'])
     })
   })
 

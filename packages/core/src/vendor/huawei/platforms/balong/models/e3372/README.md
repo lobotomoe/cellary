@@ -39,7 +39,7 @@ The E3372 always starts in storage mode (virtual CD-ROM with driver installer). 
 
 - **AT interface:** USB interface 1 (bInterfaceProtocol = 1)
 - **Profile:** Huawei (vendor `^` prefix commands)
-- **Init sequence:** ATE0, AT+CMEE=1, AT+CMGF=0, AT+CNMI=2,1,0,0,0, AT+CREG=2, AT+CGREG=1, AT+CLIP=1, AT^CURC=0, AT^USSDMODE=0
+- **Init sequence:** ATE1, AT+CMEE=1, AT+CMGF=0, AT+CNMI=2,1,0,0,0, AT+CREG=2, AT+CGREG=1, AT+CLIP=1, AT^CURC=0, AT^USSDMODE=0
 
 ### Supported AT commands (verified on our unit)
 

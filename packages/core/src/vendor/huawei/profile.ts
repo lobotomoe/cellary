@@ -125,7 +125,7 @@ export const huaweiProfile: DeviceProfile = {
   at: {
     initCommands: [
       // Standard 3GPP
-      'ATE0', // Disable echo
+      'ATE1', // Enable echo — delimits each command's response for post-timeout resync
       'AT+CMEE=1', // Enable numeric CME error codes
       'AT+CMGF=0', // PDU mode for SMS
       'AT+CNMI=2,1,0,0,0', // Route new SMS as +CMTI URCs

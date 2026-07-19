@@ -10,7 +10,7 @@ import type { DeviceProfile } from '../../types.js'
  * - AT+ICCID for ICCID (not +CCID or +ZGETICCID)
  * - ZTE vendor URCs: +ZPAS (service change), +ZRSSI (signal)
  * - Qualcomm vendor URCs: $QCSIMSTAT, $CREG, $QCSYSMODE
- * - Echo enabled by default — ATE0 is critical
+ * - Echo enabled by default — kept on (ATE1) so the channel can resync after a timeout
  * - AT+ZSNT for network selection type
  *
  * Tested with: ZTE MF656 (FW BD_MF656V1.0.2B11).
@@ -21,7 +21,7 @@ export const zteProfile: DeviceProfile = {
 
   at: {
     initCommands: [
-      'ATE0', // Disable echo (enabled by default on ZTE)
+      'ATE1', // Keep echo on (ZTE default) — echo delimits responses for post-timeout resync
       'AT+CMEE=1', // Numeric CME error codes
       'AT+CMGF=0', // PDU mode for SMS
       'AT+CNMI=2,1,0,0,0', // Route new SMS as +CMTI URCs

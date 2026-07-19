@@ -74,6 +74,11 @@ export class ATChannel {
   private currentResponseLines: string[] = []
   private commandTimer: ReturnType<typeof setTimeout> | null = null
   private commandStartTime = 0
+  /**
+   * True while discarding a timed-out command's late response until the next
+   * command's echo re-aligns the stream. See handleTimeout()/handleLine().
+   */
+  private resyncing = false
 
   private readonly urcPrefixes: Set<string>
   private readonly urcHandlers = new Map<string, URCHandler[]>()
@@ -214,6 +219,7 @@ export class ATChannel {
     this.unresponsive = false
     this.state = 'idle'
     this.currentResponseLines = []
+    this.resyncing = false
     this.lineAssembler.reset()
 
     const error = new ChannelDisposedError()
@@ -247,6 +253,7 @@ export class ATChannel {
 
     this.state = 'idle'
     this.currentResponseLines = []
+    this.resyncing = false
     this.lineAssembler.reset()
   }
 
@@ -304,6 +311,25 @@ export class ATChannel {
 
     const parsed = parseLine(line, context)
     this._log.trace('AT RX', { line, type: parsed.type })
+
+    // With echo on, the modem echoes the PDU data after the '>' prompt. The
+    // parser can't see promptData, so it would misclassify the echoed hex as an
+    // info response — discard it here.
+    if (this.state === 'data_input' && this.currentEntry?.command.promptData === line) {
+      return
+    }
+
+    // Resync after a timeout: the timed-out command's response may still be in
+    // flight. Discard everything until the CURRENT command's echo marks the start
+    // of its own response, so a late `OK` can't resolve the wrong command. URCs
+    // are unsolicited and always dispatched.
+    if (this.resyncing && parsed.type !== 'urc') {
+      if (parsed.type === 'echo') {
+        this.resyncing = false
+        this._log.debug('Resynced on command echo', { line })
+      }
+      return
+    }
 
     switch (parsed.type) {
       case 'empty':
@@ -397,6 +423,12 @@ export class ATChannel {
     this.state = 'idle'
     this.currentResponseLines = []
     this.commandTimer = null
+
+    // Attempt to realign the stream on the next command's echo. If we were
+    // ALREADY resyncing, the echo never arrived (the device isn't echoing), so
+    // give up rather than discard every future command's response — degrading to
+    // best-effort instead of wedging the channel.
+    this.resyncing = !this.resyncing
 
     this.consecutiveTimeouts++
     this._log.warn('AT timeout', {

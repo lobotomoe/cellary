@@ -121,7 +121,7 @@ invisible to it. Database entries are required for discovery.
 
 ## AT Command Notes
 
-- **Echo enabled by default** -- `ATE0` must be in init sequence
+- **Echo enabled by default** -- kept on (`ATE1`) so the channel can resync after a timeout
 - **ICCID:** `AT+ICCID` (returns `ICCID: <value>`). `AT+CCID`, `AT+ZGETICCID`, `AT+QCCID` are not supported
 - **Network type:** `AT+ZPAS?` returns service and domain (e.g. `"EDGE","CS_PS"`)
 - **Signal:** Standard `AT+CSQ` works. `+ZRSSI` URC fires on signal change

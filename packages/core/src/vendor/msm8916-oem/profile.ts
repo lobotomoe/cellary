@@ -21,7 +21,7 @@ export const msm8916OemProfile: DeviceProfile = {
   at: {
     initCommands: [
       // Standard 3GPP
-      'ATE0', // Disable echo
+      'ATE1', // Enable echo — delimits each command's response for post-timeout resync
       'AT+CFUN=1', // Full functionality — MUST be early, fresh sessions get SIM state 255 without it
       'AT+CMEE=2', // Verbose CME error codes (Qualcomm returns useful text)
       'AT+CMGF=0', // PDU mode for SMS

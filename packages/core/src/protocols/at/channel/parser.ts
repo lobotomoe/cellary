@@ -21,7 +21,7 @@ export function parseLine(line: string, context: ParserContext): ParsedLine {
     return { type: 'empty' }
   }
 
-  // 2. Echo — the modem echoed back our command (before ATE0 takes effect)
+  // 2. Echo — the modem echoed back our command (echo is on; ATE1)
   if (context.currentCommand !== null && line === context.currentCommand) {
     return { type: 'echo', raw: line }
   }

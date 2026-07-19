@@ -229,7 +229,7 @@ export class AtAdapter extends EventEmitter implements ProtocolAdapter {
     //    SIM initialization that never completes. Channel is truly unresponsive.
     //
     // 2. SIM inserted but radio not initialized: configuration commands work
-    //    (ATE0, AT+CMEE, AT+CMGF) but radio-dependent commands hang (AT+CREG,
+    //    (ATE1, AT+CMEE, AT+CMGF) but radio-dependent commands hang (AT+CREG,
     //    AT+CGREG, AT+CLIP). Channel is partially responsive.
     //
     // The cascade detector handles both: 3 consecutive timeouts -> bail out.

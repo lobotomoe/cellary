@@ -14,7 +14,7 @@ export { MF656_PID_MODEM, MF656_PID_STORAGE }
  *
  * Mode switch: PID 0x2000 (CD-ROM) -> eject -> PID 0x0031 (modem).
  * ICCID command: AT+ICCID (returns "ICCID: <value>").
- * Echo enabled by default — init must send ATE0.
+ * Echo enabled by default — kept on (ATE1) for post-timeout resync.
  */
 export const mf656Model: ModelInfo = {
   name: 'ZTE MF656',
