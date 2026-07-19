@@ -495,9 +495,10 @@ function parseUdhConcat(reader: HexReader, udhEnd: number): ConcatInfo | undefin
 // ─── GSM 7-bit Decoding ─────────────────────────────────────────────────────
 
 // GSM 7-bit Basic Character Set (3GPP TS 23.038 section 6.2.1)
-// Index -> Unicode character
+// Index -> Unicode character. Exported as the single source of truth for both
+// decode (here) and encode (pdu-encode-gsm7.ts builds the reverse map).
 // prettier-ignore
-const GSM7_TABLE: readonly string[] = [
+export const GSM7_TABLE: readonly string[] = [
   '@',
   '\u00A3',
   '$',
@@ -630,7 +631,7 @@ const GSM7_TABLE: readonly string[] = [
 
 // GSM 7-bit Extension Table (3GPP TS 23.038 section 6.2.1.1)
 // Accessed via ESC (0x1B) prefix
-const GSM7_EXTENSION: Readonly<Record<number, string>> = {
+export const GSM7_EXTENSION: Readonly<Record<number, string>> = {
   10: '\f', // form feed
   20: '^',
   40: '{',
@@ -643,7 +644,7 @@ const GSM7_EXTENSION: Readonly<Record<number, string>> = {
   101: '\u20AC', // euro sign
 }
 
-const GSM7_ESC = 0x1b
+export const GSM7_ESC = 0x1b
 
 /**
  * Decode GSM 7-bit packed data from hex string.

@@ -170,3 +170,20 @@ export function isGsm7BitCompatible(text: string): boolean {
   }
   return true
 }
+
+/**
+ * Count the GSM 7-bit septets a string occupies.
+ *
+ * Basic-alphabet characters cost one septet; extension-table characters
+ * (`^ { } \ [ ] ~ |` and €) cost two (ESC + code). This is the value that must
+ * be compared against the 160 / 153-septet limits — not the character count,
+ * since a string of extension characters can exceed the limit at half the
+ * length. Assumes `isGsm7BitCompatible(text)` is true.
+ */
+export function gsm7SeptetLength(text: string): number {
+  let septets = 0
+  for (const char of text) {
+    septets += GSM7_EXTENSION.has(char) ? 2 : 1
+  }
+  return septets
+}

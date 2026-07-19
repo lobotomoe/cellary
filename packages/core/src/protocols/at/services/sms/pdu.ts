@@ -201,7 +201,7 @@ function splitUcs2Text(text: string, maxCharsPerSegment: number): string[] {
 }
 
 /** Get next concatenation reference number (0-255, wrapping) */
-function nextConcatRef(): number {
+export function nextConcatRef(): number {
   const ref = concatRefCounter
   concatRefCounter = (concatRefCounter + 1) % 256
   return ref
@@ -224,7 +224,7 @@ export function _resetConcatRef(value = 0): void {
  * Digits are BCD-encoded with nibble swapping: "1234" -> "2143".
  * Odd-length numbers get padded with 'F': "12345" -> "214365" -> "2143F5".
  */
-function encodeAddress(number: string): string {
+export function encodeAddress(number: string): string {
   const international = number.startsWith('+')
   const digits = international ? number.slice(1) : number
   const addressLength = toHexByte(digits.length)
@@ -271,6 +271,6 @@ function encodeUcs2(text: string): string {
 // -- Helpers ------------------------------------------------------------------
 
 /** Convert a byte value (0-255) to a 2-character uppercase hex string. */
-function toHexByte(value: number): string {
+export function toHexByte(value: number): string {
   return value.toString(16).toUpperCase().padStart(2, '0')
 }

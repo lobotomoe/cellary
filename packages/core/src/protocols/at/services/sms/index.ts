@@ -2,10 +2,14 @@ import { ParseError } from '../../../../errors.js'
 import type { SmsCount, SmsMessage } from '../../../../types.js'
 import type { Sms } from '../../../adapter.js'
 import type { ATChannel } from '../../channel/at-channel.js'
-import { isGsm7BitCompatible } from '../../gsm7.js'
+import { gsm7SeptetLength, isGsm7BitCompatible } from '../../gsm7.js'
 import type { AtConfig } from '../../types.js'
-import { encodePduSubmit } from './pdu.js'
+import { encodePduSubmit, type PduResult } from './pdu.js'
 import { type ConcatInfo, decodeStoredMessage, type StoredMessage } from './pdu-decode.js'
+import { encodeGsm7SubmitPdus } from './pdu-encode-gsm7.js'
+
+/** A single GSM 7-bit SMS holds 160 septets; longer text must be concatenated. */
+const GSM7_SINGLE_SMS_SEPTETS = 160
 
 // ─── PDU mode status codes (3GPP TS 27.005 section 3.1) ────────────────────
 
@@ -59,9 +63,15 @@ export class SmsModule implements Sms {
    */
   async send(to: string, text: string): Promise<number> {
     if (isGsm7BitCompatible(text)) {
-      return this.sendTextMode(to, text)
+      // A single GSM 7-bit SMS fits in text mode; longer text must be split via
+      // PDU-mode concatenation (text mode cannot segment). Note the budget is in
+      // septets — extension chars (€, {, }, …) cost two, so char count is wrong.
+      if (gsm7SeptetLength(text) <= GSM7_SINGLE_SMS_SEPTETS) {
+        return this.sendTextMode(to, text)
+      }
+      return this.sendPdus(encodeGsm7SubmitPdus(to, text))
     }
-    return this.sendPduMode(to, text)
+    return this.sendPdus(encodePduSubmit(to, text))
   }
 
   /** Send via text mode (AT+CMGF=1) -- for GSM 7-bit compatible text */
@@ -78,16 +88,14 @@ export class SmsModule implements Sms {
   }
 
   /**
-   * Send via PDU mode (AT+CMGF=0) -- for UCS-2 unicode text.
+   * Send pre-encoded SMS-SUBMIT PDU segments via PDU mode (AT+CMGF=0).
    *
-   * Long messages are automatically split into concatenated segments
-   * with UDH headers per 3GPP TS 23.040 section 9.2.3.24.1.
+   * Long messages arrive here already split into concatenated segments with
+   * UDH headers (3GPP TS 23.040 section 9.2.3.24.1). Segments are encoded by
+   * the caller before any AT command runs, so invalid input fails fast.
    * Returns the message reference of the first segment.
    */
-  private async sendPduMode(to: string, text: string): Promise<number> {
-    // Encode all PDUs before sending any AT commands -- fail fast on invalid input
-    const segments = encodePduSubmit(to, text)
-
+  private async sendPdus(segments: readonly PduResult[]): Promise<number> {
     await this.channel.execute('AT+CMGF=0')
 
     let firstRef: number | undefined
