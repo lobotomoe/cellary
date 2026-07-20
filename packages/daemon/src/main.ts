@@ -15,12 +15,14 @@ import {
 } from 'cellary'
 import { pino } from 'pino'
 
+import { AuditReader } from './audit-reader.js'
 import { FileAuditSink } from './audit-sink.js'
 import { config } from './config.js'
 import { DeviceManager } from './device-manager.js'
 import { EventBridge } from './event-bridge.js'
 import type { DaemonStatus } from './ipc/protocol.js'
 import {
+  auditTailSchema,
   claimSchema,
   deviceIdSchema,
   getSocketPath,
@@ -143,6 +145,11 @@ const server = new IpcServer({
       return null
     }
 
+    if (method === 'daemon.auditTail') {
+      const { limit, deviceId } = auditTailSchema.parse(params)
+      return auditReader.tail({ limit, deviceId })
+    }
+
     // ── Streams ────────────────────────────────────────────────────
     if (method === 'stream.open') {
       const { deviceId, type } = streamOpenSchema.parse(params)
@@ -212,6 +219,8 @@ const auditSink = new FileAuditSink(config.auditFile, {
   retentionMs: config.auditRetentionMs,
   onWarn: (message, err) => log.warn(message, { error: err }),
 })
+// Read side for daemon.auditTail: same file/rotation convention as the sink.
+const auditReader = new AuditReader(config.auditFile)
 
 deviceManager = new DeviceManager({
   vendors: DEFAULT_VENDORS,

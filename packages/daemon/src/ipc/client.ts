@@ -13,6 +13,7 @@ import { connect, type Socket } from 'node:net'
 import superjson from 'superjson'
 
 import type {
+  AuditLine,
   DaemonStatus,
   IpcDeviceInfo,
   IpcDiscoveryInfo,
@@ -21,6 +22,7 @@ import type {
   JsonRpcRequest,
 } from './protocol.js'
 import {
+  auditLineSchema,
   daemonStatusSchema,
   getSocketPath,
   ipcDeviceInfoSchema,
@@ -32,7 +34,7 @@ import { RemoteInteractiveStream } from './remote-stream.js'
 import { streamCloseSchema, streamDataSchema, streamOpenResultSchema } from './stream-protocol.js'
 
 // Re-export types that CLI/GUI consumers need
-export type { DaemonStatus, IpcDeviceInfo, IpcDiscoveryInfo, IpcEventNotification }
+export type { AuditLine, DaemonStatus, IpcDeviceInfo, IpcDiscoveryInfo, IpcEventNotification }
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -200,6 +202,19 @@ export class DaemonClient extends EventEmitter {
 
   async shutdown(): Promise<void> {
     await this.call('daemon.shutdown')
+  }
+
+  /**
+   * Fetch the tail of the durable device-comms audit (masked at the source),
+   * most recent last. Optionally limit the count or restrict to one device.
+   */
+  async auditTail(options?: { limit?: number; deviceId?: string }): Promise<AuditLine[]> {
+    const raw = await this.call('daemon.auditTail', {
+      limit: options?.limit,
+      deviceId: options?.deviceId,
+    })
+    const arr = Array.isArray(raw) ? raw : []
+    return arr.map((item: unknown) => auditLineSchema.parse(item))
   }
 
   async subscribe(deviceId: string, events: string[]): Promise<void> {

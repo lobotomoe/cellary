@@ -195,6 +195,13 @@ export const claimSchema = z.object({
   ttlMs: z.number().positive().optional(),
 })
 
+export const auditTailSchema = z.object({
+  /** Max records to return (most recent). Omit for the server default. */
+  limit: z.number().int().positive().max(10_000).optional(),
+  /** Restrict to one device's traffic. Omit for all devices. */
+  deviceId: z.string().optional(),
+})
+
 export const systemShellSchema = z.object({
   deviceId: z.string(),
   command: z.string(),
@@ -322,6 +329,7 @@ export type RpcMethod =
   // Daemon management
   | 'daemon.status'
   | 'daemon.shutdown'
+  | 'daemon.auditTail'
 
 // ── Event notification types ───────────────────────────────────────────────
 
@@ -427,6 +435,21 @@ export const daemonStatusSchema = z.object({
   pid: z.number(),
   version: z.string(),
 })
+
+/**
+ * One device-comms audit record, as returned by daemon.auditTail. Masked at
+ * the source; safe to surface. Mirrors the JSONL shape FileAuditSink writes.
+ */
+export const auditLineSchema = z.object({
+  ts: z.number(),
+  deviceId: z.string(),
+  protocol: z.string(),
+  dir: z.enum(['tx', 'rx']),
+  text: z.string(),
+  outcome: z.string().optional(),
+})
+
+export type AuditLine = z.infer<typeof auditLineSchema>
 
 // ── Socket paths ───────────────────────────────────────────────────────────
 
