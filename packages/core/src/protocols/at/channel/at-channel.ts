@@ -10,6 +10,7 @@ import { noopLogger } from '../../../logger.js'
 import type { Transport } from '../../../types.js'
 import type { ATCommand, ATCommandResult, ATResultCode, URC, URCHandler } from '../types.js'
 import { LineAssembler } from './line-assembler.js'
+import { maskAtSecrets } from './mask.js'
 import { parseLine } from './parser.js'
 
 type ChannelState = 'idle' | 'command_sent' | 'awaiting_prompt' | 'data_input'
@@ -282,7 +283,10 @@ export class ATChannel {
       this.handleTimeout()
     }, entry.command.timeout)
 
-    this._log.trace('AT TX', { cmd: entry.command.raw, timeout: entry.command.timeout })
+    this._log.trace('AT TX', {
+      cmd: maskAtSecrets(entry.command.raw),
+      timeout: entry.command.timeout,
+    })
 
     // Write command to transport.
     // Catch write errors (e.g. transport closed after USB disconnect) and reject
@@ -296,7 +300,10 @@ export class ATChannel {
       this.clearTimer()
       this.state = 'idle'
       this.currentEntry = null
-      this._log.warn('AT write failed', { cmd: entry.command.raw, error: String(err) })
+      this._log.warn('AT write failed', {
+        cmd: maskAtSecrets(entry.command.raw),
+        error: String(err),
+      })
       entry.reject(err instanceof Error ? err : new Error('Transport write failed'))
       this.processQueue()
     })
@@ -310,7 +317,7 @@ export class ATChannel {
     }
 
     const parsed = parseLine(line, context)
-    this._log.trace('AT RX', { line, type: parsed.type })
+    this._log.trace('AT RX', { line: maskAtSecrets(line), type: parsed.type })
 
     // With echo on, the modem echoes the PDU data after the '>' prompt. The
     // parser can't see promptData, so it would misclassify the echoed hex as an
@@ -399,7 +406,7 @@ export class ATChannel {
     this.currentResponseLines = []
 
     this._log.debug('AT complete', {
-      cmd: entry.command.raw,
+      cmd: maskAtSecrets(entry.command.raw),
       result: result.type,
       lines: commandResult.lines.length,
       durationMs,
