@@ -6,8 +6,9 @@
  *
  * File logging (JSON lines in `logs/`) is always active — every CLI run
  * produces a log file for post-mortem analysis. Log files are gitignored.
- *
- * With --verbose, pretty-printed trace output also goes to stderr.
+ * The file log defaults to `info`; --verbose raises it to `trace` and also
+ * mirrors pretty-printed trace output to stderr. Detailed device traffic
+ * belongs in the durable device-comms audit, not the app log.
  */
 
 import { existsSync, mkdirSync } from 'node:fs'
@@ -67,18 +68,31 @@ function buildLogFilePath(): string {
 }
 
 /**
- * Create a Logger for CLI commands.
- *
- * Always writes JSON lines to `logs/<timestamp>.log`.
- * When verbose is true, also writes pretty-printed trace output to stderr.
+ * Default file-log level. Detailed device traffic (trace) is opt-in via
+ * --verbose; by default the app log stays at info so we don't persist AT
+ * traffic to disk on every run.
  */
-export function createLogger(verbose: boolean): Logger {
-  const logFile = buildLogFilePath()
+const DEFAULT_FILE_LEVEL: pino.Level = 'info'
+const VERBOSE_LEVEL: pino.Level = 'trace'
+
+/**
+ * Build the pino transport config for the CLI logger.
+ *
+ * Without verbose: a single JSON file target at info.
+ * With verbose: the file target is raised to trace, plus a pretty stderr mirror.
+ *
+ * Exported for unit-testing the level policy without spinning up pino.
+ */
+export function buildLogTransport(
+  verbose: boolean,
+  logFile: string,
+): { level: pino.Level; targets: pino.TransportTargetOptions[] } {
+  const fileLevel = verbose ? VERBOSE_LEVEL : DEFAULT_FILE_LEVEL
 
   const targets: pino.TransportTargetOptions[] = [
     {
       target: 'pino/file',
-      level: 'trace',
+      level: fileLevel,
       options: { destination: logFile },
     },
   ]
@@ -86,7 +100,7 @@ export function createLogger(verbose: boolean): Logger {
   if (verbose) {
     targets.push({
       target: 'pino-pretty',
-      level: 'trace',
+      level: VERBOSE_LEVEL,
       options: {
         destination: 2, // stderr
         colorize: true,
@@ -96,10 +110,21 @@ export function createLogger(verbose: boolean): Logger {
     })
   }
 
-  const instance = pino({
-    level: 'trace',
-    transport: { targets },
-  })
+  // Root level must match the most permissive target so nothing is filtered
+  // before it reaches a target. When verbose, both targets are trace.
+  return { level: fileLevel, targets }
+}
 
+/**
+ * Create a Logger for CLI commands.
+ *
+ * Always writes JSON lines to `logs/<timestamp>.log` (info by default).
+ * When verbose is true, raises the file log to trace and also writes
+ * pretty-printed trace output to stderr.
+ */
+export function createLogger(verbose: boolean): Logger {
+  const logFile = buildLogFilePath()
+  const { level, targets } = buildLogTransport(verbose, logFile)
+  const instance = pino({ level, transport: { targets } })
   return wrapPino(instance)
 }
