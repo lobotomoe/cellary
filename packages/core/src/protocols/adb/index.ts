@@ -6,6 +6,7 @@ export { AdbShell } from './shell.js'
 export type { AdbAtBridge, AdbMessage, AdbStream, ShellResult } from './types.js'
 export { AdbConnection, type AdbConnectionLike } from './wire.js'
 
+import type { AuditSink } from '../../audit.js'
 import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
 import { AdbShell } from './shell.js'
@@ -30,11 +31,12 @@ export async function connectAdbOverUsb(
   vendorId: number,
   productId: number,
   logger?: Logger,
+  auditSink?: AuditSink,
 ): Promise<AdbShell> {
   const log = logger ?? noopLogger
   const duplex = openAdbUsbBulkDuplex(vendorId, productId)
   const conn = await AdbConnection.fromDuplex(duplex)
-  return new AdbShell(conn, log)
+  return new AdbShell(conn, log, auditSink)
 }
 
 /**
@@ -49,6 +51,7 @@ export async function probeAdb(
   port: number,
   timeoutMs: number,
   logger?: Logger,
+  auditSink?: AuditSink,
 ): Promise<AdbShell | undefined> {
   const log = logger ?? noopLogger
 
@@ -58,7 +61,7 @@ export async function probeAdb(
     )
     const attempt = (async () => {
       const conn = await AdbConnection.connect(host, port)
-      const shell = new AdbShell(conn, log)
+      const shell = new AdbShell(conn, log, auditSink)
       const alive = await shell.ping()
       if (!alive) {
         await shell.close()

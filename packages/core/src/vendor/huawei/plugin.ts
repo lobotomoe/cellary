@@ -1,3 +1,4 @@
+import type { AuditSink } from '../../audit.js'
 import { DiscoveryError } from '../../errors.js'
 import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
@@ -71,7 +72,7 @@ export const huaweiPlugin: VendorPlugin = {
       ]
 
       // Probe ADB on the same network (HiLink devices run Android with adbd)
-      const adbResult = await probeAndCreateAdb(transport.url, profile, model, log)
+      const adbResult = await probeAndCreateAdb(transport.url, profile, model, log, opts?.auditSink)
       if (adbResult !== undefined) {
         adapters.push(...adbResult.adapters)
       }
@@ -124,7 +125,7 @@ export const huaweiPlugin: VendorPlugin = {
 
     // Probe ADB if HiLink is reachable (same CDC-ECM network)
     if (hiLinkReachable) {
-      const adbResult = await probeAndCreateAdb(baseUrl, profile, model, log)
+      const adbResult = await probeAndCreateAdb(baseUrl, profile, model, log, opts?.auditSink)
       if (adbResult !== undefined) adapters.push(...adbResult.adapters)
     }
 
@@ -183,6 +184,7 @@ async function probeAndCreateAdb(
   profile: DeviceProfile,
   model: ModelInfo | undefined,
   log: Logger,
+  auditSink?: AuditSink,
 ): Promise<AdbProbeResult | undefined> {
   const { probeAdb } = await import('../../protocols/adb/index.js')
 
@@ -190,7 +192,13 @@ async function probeAndCreateAdb(
   const host = new URL(httpUrl).hostname
   log.info('Probing ADB', { host, port: ADB_PORT })
 
-  const shell = await probeAdb(host, ADB_PORT, ADB_PROBE_TIMEOUT_MS, log.child({ probe: 'adb' }))
+  const shell = await probeAdb(
+    host,
+    ADB_PORT,
+    ADB_PROBE_TIMEOUT_MS,
+    log.child({ probe: 'adb' }),
+    auditSink,
+  )
   if (shell === undefined) {
     log.info('ADB not available', { host })
     return undefined
@@ -202,7 +210,7 @@ async function probeAndCreateAdb(
   const serialAvailable = await probeSerialDevice(shell, BALONG_APPVCOM, log)
 
   if (serialAvailable) {
-    return createAdbWithSerialAt(shell, BALONG_APPVCOM, profile, model, log)
+    return createAdbWithSerialAt(shell, BALONG_APPVCOM, profile, model, log, auditSink)
   }
 
   // Fallback: no internal serial, use one-shot AT bridge
@@ -262,6 +270,7 @@ async function createAdbWithSerialAt(
   profile: DeviceProfile,
   model: ModelInfo | undefined,
   log: Logger,
+  auditSink?: AuditSink,
 ): Promise<AdbProbeResult> {
   const { AdbAdapter } = await import('../../protocols/adb/adapter.js')
   const { AdbSerialTransport } = await import('../../protocols/adb/serial-transport.js')
@@ -282,6 +291,7 @@ async function createAdbWithSerialAt(
     defaultTimeout: 10_000,
     commandTimeouts: atConfig.commandTimeouts,
     logger: log.child({ adapter: 'at-adb' }),
+    auditSink,
   })
 
   await transport.open()

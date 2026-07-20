@@ -5,8 +5,10 @@
  * with timeout, error handling, and structured results.
  */
 
+import { type AuditSink, noopAuditSink } from '../../audit.js'
 import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
+import { maskAtSecrets } from '../at/channel/mask.js'
 import { ADB_SHELL_TIMEOUT_MS } from './constants.js'
 import type { ShellResult } from './types.js'
 import type { AdbConnectionLike } from './wire.js'
@@ -14,10 +16,12 @@ import type { AdbConnectionLike } from './wire.js'
 export class AdbShell {
   private readonly _conn: AdbConnectionLike
   private readonly _log: Logger
+  private readonly _audit: AuditSink
 
-  constructor(conn: AdbConnectionLike, logger?: Logger) {
+  constructor(conn: AdbConnectionLike, logger?: Logger, auditSink?: AuditSink) {
     this._conn = conn
     this._log = logger ?? noopLogger
+    this._audit = auditSink ?? noopAuditSink
   }
 
   /** The underlying ADB connection (for opening persistent streams). */
@@ -33,9 +37,19 @@ export class AdbShell {
    */
   async exec(command: string, timeoutMs?: number): Promise<ShellResult> {
     const timeout = timeoutMs ?? ADB_SHELL_TIMEOUT_MS
-    this._log.debug('Shell exec', { command, timeout })
+    // Shell commands can carry AT credentials (the vendor AT bridge sends
+    // `AT+CPIN=<pin>` as a shell string), so mask before logging or auditing.
+    const masked = maskAtSecrets(command)
+    this._log.debug('Shell exec', { command: masked, timeout })
+    this._audit.record({ timestamp: Date.now(), protocol: 'adb', direction: 'tx', text: masked })
 
     const raw = await this._conn.openShell(command, timeout)
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'adb',
+      direction: 'rx',
+      text: maskAtSecrets(raw),
+    })
 
     // Try to extract exit code from the output.
     // shell_v2 protocol appends exit code, but on older adbd (shell v1)
@@ -58,23 +72,34 @@ export class AdbShell {
     const delimiter = '___ADB_EXIT___'
     const wrapped = `${command}; echo ${delimiter}$?`
 
-    this._log.debug('Shell execWithStatus', { command, timeout })
+    const masked = maskAtSecrets(command)
+    this._log.debug('Shell execWithStatus', { command: masked, timeout })
+    this._audit.record({ timestamp: Date.now(), protocol: 'adb', direction: 'tx', text: masked })
+
     const raw = await this._conn.openShell(wrapped, timeout)
 
     const delimiterIdx = raw.lastIndexOf(delimiter)
+    let result: ShellResult
     if (delimiterIdx === -1) {
       // Delimiter not found — command output may have been truncated
-      return { stdout: raw, exitCode: undefined }
+      result = { stdout: raw, exitCode: undefined }
+    } else {
+      const stdout = raw.substring(0, delimiterIdx)
+      const exitCodeStr = raw.substring(delimiterIdx + delimiter.length).trim()
+      const exitCode = Number(exitCodeStr)
+      result = {
+        stdout: stdout.trimEnd(),
+        exitCode: Number.isNaN(exitCode) ? undefined : exitCode,
+      }
     }
 
-    const stdout = raw.substring(0, delimiterIdx)
-    const exitCodeStr = raw.substring(delimiterIdx + delimiter.length).trim()
-    const exitCode = Number(exitCodeStr)
-
-    return {
-      stdout: stdout.trimEnd(),
-      exitCode: Number.isNaN(exitCode) ? undefined : exitCode,
-    }
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'adb',
+      direction: 'rx',
+      text: maskAtSecrets(result.stdout),
+    })
+    return result
   }
 
   /** Check if the ADB connection is alive. */

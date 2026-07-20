@@ -13,6 +13,7 @@
  * Thermal service is attached so the preparation pipeline can cap CPU frequency.
  */
 
+import type { AuditSink } from '../../audit.js'
 import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
 import type { ProtocolAdapter, VendorPlugin } from '../../protocols/adapter.js'
@@ -27,11 +28,17 @@ async function createAdbThermalAdapter(
   vendorId: number,
   productId: number,
   log: Logger,
+  auditSink?: AuditSink,
 ): Promise<ProtocolAdapter> {
   const { AdbAdapter, connectAdbOverUsb } = await import('../../protocols/adb/index.js')
   const { Msm8916Thermal } = await import('./protocols/adb/thermal.js')
 
-  const shell = await connectAdbOverUsb(vendorId, productId, log.child({ adapter: 'adb' }))
+  const shell = await connectAdbOverUsb(
+    vendorId,
+    productId,
+    log.child({ adapter: 'adb' }),
+    auditSink,
+  )
   const thermal = new Msm8916Thermal(shell, log.child({ service: 'thermal' }))
 
   return new AdbAdapter(shell, log.child({ adapter: 'adb' }), {
@@ -79,7 +86,14 @@ export const msm8916OemPlugin: VendorPlugin = {
     // AT adapter and let the thermal remediation report the gap downstream.
     if (transport.type === 'usb' && transport.productId === UZ801_PID_MODEM_DIAG_ADB) {
       try {
-        adapters.push(await createAdbThermalAdapter(transport.vendorId, transport.productId, log))
+        adapters.push(
+          await createAdbThermalAdapter(
+            transport.vendorId,
+            transport.productId,
+            log,
+            opts?.auditSink,
+          ),
+        )
         log.info('Attached ADB adapter with thermal control')
       } catch (err: unknown) {
         log.warn('ADB adapter unavailable; thermal control disabled', {
