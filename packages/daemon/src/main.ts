@@ -15,6 +15,7 @@ import {
 } from 'cellary'
 import { pino } from 'pino'
 
+import { FileAuditSink } from './audit-sink.js'
 import { config } from './config.js'
 import { DeviceManager } from './device-manager.js'
 import { EventBridge } from './event-bridge.js'
@@ -205,11 +206,17 @@ const server = new IpcServer({
 eventBridge = new EventBridge(server)
 streamManager = new StreamManager(server, log)
 
+// Durable, append-only device-comms audit, separate from the pino app log.
+const auditSink = new FileAuditSink(config.auditFile)
+
 deviceManager = new DeviceManager({
   vendors: DEFAULT_VENDORS,
   resolvers: DEFAULT_RESOLVERS,
   modemDatabase: USB_MODEM_DATABASE,
   logger: log,
+  createAuditSink: (deviceId) => ({
+    record: (record) => auditSink.append(deviceId, record),
+  }),
   onDeviceEvent(deviceId, event, data) {
     // Device lifecycle events: broadcast to all clients
     if (event === 'device:added' || event === 'device:removed' || event === 'device:readiness') {
@@ -242,6 +249,7 @@ async function shutdown(): Promise<void> {
   streamManager.closeAll()
   await deviceManager.stop()
   await server.stop()
+  auditSink.close()
 
   log.info('Shutdown complete')
   process.exit(0)
