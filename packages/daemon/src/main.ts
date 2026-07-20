@@ -207,7 +207,11 @@ eventBridge = new EventBridge(server)
 streamManager = new StreamManager(server, log)
 
 // Durable, append-only device-comms audit, separate from the pino app log.
-const auditSink = new FileAuditSink(config.auditFile)
+const auditSink = new FileAuditSink(config.auditFile, {
+  maxBytes: config.auditMaxBytes,
+  retentionMs: config.auditRetentionMs,
+  onWarn: (message, err) => log.warn(message, { error: err }),
+})
 
 deviceManager = new DeviceManager({
   vendors: DEFAULT_VENDORS,
@@ -215,7 +219,15 @@ deviceManager = new DeviceManager({
   modemDatabase: USB_MODEM_DATABASE,
   logger: log,
   createAuditSink: (deviceId) => ({
-    record: (record) => auditSink.append(deviceId, record),
+    // Audit is best-effort from core's perspective: a sink failure must never
+    // break device comms, so swallow-and-log at this boundary.
+    record: (record) => {
+      try {
+        auditSink.append(deviceId, record)
+      } catch (err) {
+        log.error('Audit append failed', { deviceId, error: err })
+      }
+    },
   }),
   onDeviceEvent(deviceId, event, data) {
     // Device lifecycle events: broadcast to all clients
