@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import type { AuditSink } from './audit.js'
 import type { ProvisionResult } from './discovery/provisioner.js'
 import type { DiscoveredModem } from './discovery/usb-types.js'
 import { DiscoveryError, NotSupportedError, PreparationError, TransportError } from './errors.js'
@@ -49,6 +50,8 @@ export interface ConnectOptions {
   readonly autoInit?: boolean | undefined
   readonly defaultTimeout?: number | undefined
   readonly logger?: Logger | undefined
+  /** Device-comms audit sink. Receives a masked record per message exchanged. */
+  readonly auditSink?: AuditSink | undefined
   readonly onProgress?: ((event: ConnectionProgress) => void) | undefined
   /**
    * Remediation policy for the preparation pipeline — controls which
@@ -101,6 +104,8 @@ export interface ModemOptions {
   readonly extraAdapters?: readonly ProtocolAdapter[] | undefined
   /** Structured logger for debug output. Defaults to noopLogger (zero overhead). */
   readonly logger?: Logger | undefined
+  /** Device-comms audit sink. Receives a masked record per message exchanged. */
+  readonly auditSink?: AuditSink | undefined
   /** Progress callback for connection status (retries, phases). */
   readonly onProgress?: ((event: ConnectionProgress) => void) | undefined
 }
@@ -272,6 +277,7 @@ export class Modem extends EventEmitter {
     const adapterOpts = {
       defaultTimeout: opts.defaultTimeout,
       logger: log.child({ adapter: 'at' }),
+      auditSink: opts.auditSink,
     }
 
     let atAdapter: ProtocolAdapter
@@ -352,7 +358,11 @@ export class Modem extends EventEmitter {
     const log = options?.logger ?? noopLogger
     const profile = options?.profile ?? prepared.profile
     const vendors = options?.vendors ?? DEFAULT_VENDORS
-    const adapterOpts = { defaultTimeout: options?.defaultTimeout, logger: log }
+    const adapterOpts = {
+      defaultTimeout: options?.defaultTimeout,
+      logger: log,
+      auditSink: options?.auditSink,
+    }
 
     // O(1) vendor plugin lookup by vendorId
     const profileVendorId = prepared.profile.vendorId

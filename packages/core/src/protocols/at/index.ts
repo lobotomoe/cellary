@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import type { AuditSink } from '../../audit.js'
 import { ATError, TimeoutError, TransportError } from '../../errors.js'
 import type { Logger } from '../../logger.js'
 import { SerialTransport } from '../../transport/serial.js'
@@ -75,6 +76,7 @@ export interface AtConnectOptions {
   readonly defaultTimeout?: number | undefined
   readonly commandTimeouts?: Readonly<Record<string, number>> | undefined
   readonly logger?: Logger | undefined
+  readonly auditSink?: AuditSink | undefined
   /** Vendor-specific message interpreter. Injected by vendor plugins to translate raw messages into typed domain events. */
   readonly messageInterpreter?: MessageInterpreter | undefined
 }
@@ -157,6 +159,7 @@ export class AtAdapter extends EventEmitter implements ProtocolAdapter {
       defaultTimeout: opts.defaultTimeout ?? 10_000,
       commandTimeouts: opts.commandTimeouts ?? atConfig.commandTimeouts,
       logger: opts.logger,
+      auditSink: opts.auditSink,
     })
     await transport.open()
     return new AtAdapter(transport, channel, atConfig, model, opts.messageInterpreter)

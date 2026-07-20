@@ -6,6 +6,7 @@
  * pipeline owns the progression logic.
  */
 
+import type { AuditSink } from '../audit.js'
 import type { DeviceSessionSnapshot, DeviceStateAnalysis } from '../discovery/observer-types.js'
 import type { DiscoveredModem } from '../discovery/usb-types.js'
 import type { Logger } from '../logger.js'
@@ -24,6 +25,8 @@ export { clearAssessmentTimer, clearRetryTimer } from './managed-device.js'
 export interface PipelineContext {
   readonly vendors: ReadonlyMap<string, VendorPlugin>
   readonly log: Logger
+  /** Per-device audit sink factory. Bound to the device's deviceId at connect. */
+  readonly createAuditSink?: ((deviceId: string) => AuditSink) | undefined
   /** Update device readiness and emit pool event. */
   setReadiness(device: ManagedDevice, readiness: DeviceReadiness): void
   /** Wire modem lifecycle listeners (disconnect/close). */
@@ -191,6 +194,7 @@ async function runPipeline(
   const connectOptions: ConnectOptions = {
     vendors: ctx.vendors,
     logger: ctx.log,
+    auditSink: ctx.createAuditSink?.(device.session.deviceId),
     onProgress: (event) => {
       if (signal.aborted || device.pipelineGeneration !== generation) return
       if (event.phase === 'checking') {

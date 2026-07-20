@@ -1,3 +1,4 @@
+import { type AuditSink, noopAuditSink } from '../../../audit.js'
 import {
   ATError,
   ChannelDisposedError,
@@ -30,6 +31,8 @@ export interface ATChannelOptions {
   readonly commandTimeouts?: Readonly<Record<string, number>> | undefined
   /** Structured logger. @default noopLogger */
   readonly logger?: Logger | undefined
+  /** Device-comms audit sink. Receives a masked record per TX/RX. @default noopAuditSink */
+  readonly auditSink?: AuditSink | undefined
   /** Maximum number of queued commands before rejecting new ones. @default 64 */
   readonly maxQueueSize?: number | undefined
   /**
@@ -91,6 +94,7 @@ export class ATChannel {
   private readonly _consecutiveTimeoutThreshold: number
   private readonly lineAssembler: LineAssembler
   private readonly _log: Logger
+  private readonly _audit: AuditSink
   private _onUnresponsive: (() => void) | undefined
 
   constructor(
@@ -98,6 +102,7 @@ export class ATChannel {
     options?: ATChannelOptions,
   ) {
     this._log = options?.logger ?? noopLogger
+    this._audit = options?.auditSink ?? noopAuditSink
     this.urcPrefixes = new Set(options?.urcPrefixes ?? [])
     this.defaultTimeout = options?.defaultTimeout ?? DEFAULT_TIMEOUT
     this.commandTimeouts = options?.commandTimeouts ?? {}
@@ -283,9 +288,13 @@ export class ATChannel {
       this.handleTimeout()
     }, entry.command.timeout)
 
-    this._log.trace('AT TX', {
-      cmd: maskAtSecrets(entry.command.raw),
-      timeout: entry.command.timeout,
+    const maskedCommand = maskAtSecrets(entry.command.raw)
+    this._log.trace('AT TX', { cmd: maskedCommand, timeout: entry.command.timeout })
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'at',
+      direction: 'tx',
+      text: maskedCommand,
     })
 
     // Write command to transport.
@@ -317,7 +326,14 @@ export class ATChannel {
     }
 
     const parsed = parseLine(line, context)
-    this._log.trace('AT RX', { line: maskAtSecrets(line), type: parsed.type })
+    const maskedLine = maskAtSecrets(line)
+    this._log.trace('AT RX', { line: maskedLine, type: parsed.type })
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'at',
+      direction: 'rx',
+      text: maskedLine,
+    })
 
     // With echo on, the modem echoes the PDU data after the '>' prompt. The
     // parser can't see promptData, so it would misclassify the echoed hex as an
@@ -439,9 +455,16 @@ export class ATChannel {
 
     this.consecutiveTimeouts++
     this._log.warn('AT timeout', {
-      cmd: entry.command.raw,
+      cmd: maskAtSecrets(entry.command.raw),
       timeout: entry.command.timeout,
       consecutiveTimeouts: this.consecutiveTimeouts,
+    })
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'at',
+      direction: 'rx',
+      text: '',
+      outcome: 'timeout',
     })
     entry.reject(new TimeoutError(entry.command.raw, entry.command.timeout))
 

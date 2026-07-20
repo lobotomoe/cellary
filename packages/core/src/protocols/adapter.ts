@@ -1,3 +1,4 @@
+import type { AuditSink } from '../audit.js'
 import type { DeviceIdentification, DiscoveredModem } from '../discovery/usb-types.js'
 import type { Flasher, FlasherOptions } from '../firmware.js'
 import type { Logger } from '../logger.js'
@@ -284,6 +285,7 @@ export interface VendorPlugin {
     opts?: {
       readonly defaultTimeout?: number | undefined
       readonly logger?: Logger | undefined
+      readonly auditSink?: AuditSink | undefined
     },
   ): Promise<AdapterDiscoveryResult>
   /**

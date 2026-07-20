@@ -1,5 +1,6 @@
 // ── Public API ────────────────────────────────────────────────────────────────
 
+export { type AuditRecord, type AuditSink, noopAuditSink } from './audit.js'
 export { type Logger, noopLogger } from './logger.js'
 export {
   type ConnectOptions,

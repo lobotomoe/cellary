@@ -6,6 +6,7 @@
  *   detected -> assessing -> preparing -> connecting -> checking -> ready
  */
 
+import type { AuditSink } from '../audit.js'
 import type {
   DeviceSessionSnapshot,
   DeviceStateAnalysis,
@@ -81,6 +82,12 @@ export interface PoolOptions {
   readonly autoProvision?: boolean | undefined
   /** Logger. */
   readonly logger?: Logger | undefined
+  /**
+   * Factory for a per-device audit sink. Called with each device's stable
+   * deviceId when its modem is created, so the host (e.g. the daemon) can bind
+   * a durable sink to a specific device. Omit to disable auditing.
+   */
+  readonly createAuditSink?: ((deviceId: string) => AuditSink) | undefined
   /** Maximum time (ms) a device stays offline before removal. Default: 300_000 (5 min). */
   readonly goneTimeoutMs?: number | undefined
   /** USB modem database for macOS pre-libusb mode switching. */

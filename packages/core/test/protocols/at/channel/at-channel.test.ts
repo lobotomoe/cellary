@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { AuditRecord } from '../../../../src/audit.js'
 import { ATError, ChannelDisposedError, TimeoutError } from '../../../../src/errors.js'
 import { ATChannel } from '../../../../src/protocols/at/channel/at-channel.js'
 import { MockTransport } from '../../../../src/transport/mock.js'
@@ -292,6 +293,58 @@ describe('ATChannel', () => {
 
       const result = await promise
       expect(result.status.type).toBe('ok')
+    })
+  })
+
+  describe('audit sink', () => {
+    async function channelWithAudit(records: AuditRecord[], defaultTimeout = 5000) {
+      const t = new MockTransport()
+      await t.open()
+      const ch = new ATChannel(t, {
+        defaultTimeout,
+        auditSink: { record: (r) => records.push(r) },
+      })
+      return { t, ch }
+    }
+
+    it('emits a masked tx record and rx records for one exchange', async () => {
+      const records: AuditRecord[] = []
+      const { t, ch } = await channelWithAudit(records)
+
+      const promise = ch.execute('AT+CSQ')
+      t.receive('\r\n+CSQ: 18,99\r\n\r\nOK\r\n')
+      await promise
+      ch.dispose()
+
+      const tx = records.filter((r) => r.direction === 'tx')
+      const rx = records.filter((r) => r.direction === 'rx')
+      expect(tx).toHaveLength(1)
+      expect(tx[0]).toMatchObject({ protocol: 'at', direction: 'tx', text: 'AT+CSQ' })
+      expect(rx.some((r) => r.text.includes('+CSQ: 18,99'))).toBe(true)
+      expect(rx.some((r) => r.text.includes('OK'))).toBe(true)
+    })
+
+    it('masks a SIM PIN in the audited command', async () => {
+      const records: AuditRecord[] = []
+      const { t, ch } = await channelWithAudit(records)
+
+      const promise = ch.execute('AT+CPIN="1234"')
+      t.receive('\r\nOK\r\n')
+      await promise
+      ch.dispose()
+
+      const tx = records.find((r) => r.direction === 'tx')
+      expect(tx?.text).toBe('AT+CPIN=[REDACTED]')
+    })
+
+    it('records a timeout outcome when no response arrives', async () => {
+      const records: AuditRecord[] = []
+      const { ch } = await channelWithAudit(records, 30)
+
+      await expect(ch.execute('AT+SLOW', { timeout: 30 })).rejects.toThrow(TimeoutError)
+      ch.dispose()
+
+      expect(records.some((r) => r.outcome === 'timeout')).toBe(true)
     })
   })
 })

@@ -67,6 +67,7 @@ export class ModemPool extends EventEmitter {
     this._pipelineCtx = {
       vendors: this._vendors,
       log: this._log,
+      createAuditSink: options?.createAuditSink,
       setReadiness: (device, readiness) => this._setReadiness(device, readiness),
       wireModem: (device, instance) => this._wireModem(device, instance),
       emitReady: (pooled, modem) => this.emit('modem:ready', pooled, modem),
