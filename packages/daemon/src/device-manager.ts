@@ -19,6 +19,7 @@ import type {
 import { ModemPool, noopLogger, provision } from 'cellary'
 
 import type { IpcDeviceInfo, IpcDiscoveryInfo, IpcReadinessStage } from './ipc/protocol.js'
+import { type LeaseInfo, LeaseRegistry } from './lease-registry.js'
 
 /**
  * Type-safe stage mapping. Compile error if DeviceReadiness gains a stage
@@ -53,6 +54,9 @@ export class DeviceManager {
 
   /** deviceId -> live Modem instance (only when ready/degraded). */
   private readonly _modems = new Map<string, Modem>()
+
+  /** Exclusive device leases, keyed by deviceId -> clientId. */
+  private readonly _leases = new LeaseRegistry()
 
   constructor(options: DeviceManagerOptions) {
     this._onDeviceEvent = options.onDeviceEvent
@@ -125,6 +129,39 @@ export class DeviceManager {
       throw new DeviceNotReadyError(deviceId)
     }
     return modem
+  }
+
+  /**
+   * Get the live Modem for a client-issued operation, enforcing the lease.
+   *
+   * Throws DeviceLeasedError if another client holds the device; otherwise
+   * behaves like getModem. This is the enforcement point for every service
+   * call and interactive shell -- a device with no lease is unrestricted, so
+   * single-client usage is unchanged.
+   */
+  getModemFor(deviceId: string, clientId: string): Modem {
+    this._leases.assertHolder(deviceId, clientId)
+    return this.getModem(deviceId)
+  }
+
+  /**
+   * Claim exclusive use of a device for a client. Fails loud if the device is
+   * unknown (a bogus id can never be enforced) or already held by another
+   * client (DeviceLeasedError).
+   */
+  claim(deviceId: string, clientId: string, ttlMs?: number): LeaseInfo {
+    this._findDevice(deviceId) // throws if the device is not known to the pool
+    return this._leases.claim(deviceId, clientId, ttlMs)
+  }
+
+  /** Release a device held by this client. */
+  release(deviceId: string, clientId: string): void {
+    this._leases.release(deviceId, clientId)
+  }
+
+  /** Drop every lease held by a client. Called when the client disconnects. */
+  releaseLeases(clientId: string): void {
+    this._leases.releaseAllForClient(clientId)
   }
 
   /**

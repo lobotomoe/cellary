@@ -20,6 +20,7 @@ import { DeviceManager } from './device-manager.js'
 import { EventBridge } from './event-bridge.js'
 import type { DaemonStatus } from './ipc/protocol.js'
 import {
+  claimSchema,
   deviceIdSchema,
   getSocketPath,
   provisionSchema,
@@ -99,6 +100,17 @@ const server = new IpcServer({
       return deviceManager.provision(deviceId)
     }
 
+    if (method === 'devices.claim') {
+      const { deviceId, ttlMs } = claimSchema.parse(params)
+      return deviceManager.claim(deviceId, clientId, ttlMs)
+    }
+
+    if (method === 'devices.release') {
+      const { deviceId } = deviceIdSchema.parse(params)
+      deviceManager.release(deviceId, clientId)
+      return null
+    }
+
     // ── Subscriptions ────────────────────────────────────────────────
     if (method === 'subscribe') {
       const { deviceId, events } = subscribeSchema.parse(params)
@@ -133,7 +145,7 @@ const server = new IpcServer({
     // ── Streams ────────────────────────────────────────────────────
     if (method === 'stream.open') {
       const { deviceId, type } = streamOpenSchema.parse(params)
-      const modem = deviceManager.getModem(deviceId)
+      const modem = deviceManager.getModemFor(deviceId, clientId)
       const system = modem.system
       if (type !== 'shell' || system.openInteractiveShell === undefined) {
         throw Object.assign(new Error(`Stream type '${type}' is not available on this device`), {
@@ -156,7 +168,7 @@ const server = new IpcServer({
     // ── Device service calls ─────────────────────────────────────────
     if (isServiceMethod(method)) {
       const result = dispatchServiceCall(method, params, (deviceId) =>
-        deviceManager.getModem(deviceId),
+        deviceManager.getModemFor(deviceId, clientId),
       )
       if (result !== undefined) return result
     }
@@ -186,6 +198,7 @@ const server = new IpcServer({
     log.info('Client disconnected', { clientId })
     eventBridge.removeClient(clientId)
     streamManager.removeClient(clientId)
+    deviceManager.releaseLeases(clientId)
   },
 })
 

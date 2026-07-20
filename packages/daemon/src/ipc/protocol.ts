@@ -53,6 +53,8 @@ export const RPC_ERRORS = {
   SERVICE_UNAVAILABLE: -32001,
   /** Operation failed (modem error, transport error, etc.). */
   OPERATION_FAILED: -32002,
+  /** Device is leased by another client. */
+  DEVICE_LEASED: -32003,
 } as const
 
 // ── Serializable device types ──────────────────────────────────────────────
@@ -187,6 +189,12 @@ export const provisionSchema = z.object({
   deviceId: z.string(),
 })
 
+export const claimSchema = z.object({
+  deviceId: z.string(),
+  /** Optional lease TTL (ms). Omit to hold until release or disconnect. */
+  ttlMs: z.number().positive().optional(),
+})
+
 export const systemShellSchema = z.object({
   deviceId: z.string(),
   command: z.string(),
@@ -236,6 +244,8 @@ export type RpcMethod =
   | 'devices.list'
   | 'devices.waitForReady'
   | 'devices.provision'
+  | 'devices.claim'
+  | 'devices.release'
 
   // Device services
   | 'device.info'

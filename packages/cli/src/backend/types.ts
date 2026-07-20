@@ -133,4 +133,12 @@ export interface ConnectOptions {
   readonly verbose?: boolean | undefined
   /** Skip AT probe and init commands. */
   readonly autoInit?: boolean | undefined
+  /**
+   * Claim the device for exclusive use for the lifetime of the connection
+   * (daemon mode only). Defaults to true: a command holds the modem for its
+   * duration and a concurrent command on the same device fails fast. Pass false
+   * for read-only/long-lived views (e.g. a live monitor) that should not lock
+   * out other commands. Ignored in direct mode (single-process, no arbiter).
+   */
+  readonly exclusive?: boolean | undefined
 }

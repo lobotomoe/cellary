@@ -180,6 +180,19 @@ export class DaemonClient extends EventEmitter {
     return raw
   }
 
+  /**
+   * Claim exclusive use of a device. Rejects with the daemon's DeviceLeasedError
+   * message if another client holds it. Optional ttlMs bounds the lease.
+   */
+  async claim(deviceId: string, ttlMs?: number): Promise<void> {
+    await this.call('devices.claim', { deviceId, ttlMs })
+  }
+
+  /** Release a device previously claimed by this client. */
+  async release(deviceId: string): Promise<void> {
+    await this.call('devices.release', { deviceId })
+  }
+
   async status(): Promise<DaemonStatus> {
     const raw = await this.call('daemon.status')
     return daemonStatusSchema.parse(raw)

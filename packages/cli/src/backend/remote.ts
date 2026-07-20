@@ -462,6 +462,7 @@ export class RemoteBackend implements Backend {
   readonly mode = 'remote' as const
   private _client: DaemonClient | undefined
   private readonly _handles = new Map<string, RemoteDeviceHandle>()
+  private readonly _claimed = new Set<string>()
 
   // ── Fleet management ──────────────────────────────────────────────────────
 
@@ -507,6 +508,14 @@ export class RemoteBackend implements Backend {
     // Resolve the requested target (--port) to a daemon deviceId, then wait for
     // that specific device. Without a target, wait for the first ready device.
     const deviceId = await this._resolveTargetDevice(client, options?.target)
+
+    // Claim exclusive use for the lifetime of this connection unless the caller
+    // opted out. If another client already holds the device, claim rejects with
+    // the daemon's DeviceLeasedError and this connect fails fast.
+    if (options?.exclusive !== false) {
+      await client.claim(deviceId)
+      this._claimed.add(deviceId)
+    }
 
     // Fetch device info to get model name
     const devices = await client.listDevices()
@@ -563,8 +572,21 @@ export class RemoteBackend implements Backend {
     }
     this._handles.clear()
 
-    if (this._client !== undefined) {
-      this._client.disconnect()
+    const client = this._client
+    if (client !== undefined) {
+      // Release our leases for prompt hand-off. The disconnect below also
+      // triggers a daemon-side release of every lease this client holds, so a
+      // failure here is non-fatal -- that fallback is what actually guarantees
+      // the device is freed.
+      for (const deviceId of this._claimed) {
+        try {
+          await client.release(deviceId)
+        } catch {
+          // Disconnect (next) releases all our leases regardless.
+        }
+      }
+      this._claimed.clear()
+      client.disconnect()
       this._client = undefined
     }
   }

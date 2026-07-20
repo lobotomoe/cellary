@@ -20,7 +20,14 @@ export default defineCommand({
     return withErrorHandling(async () => {
       const { createBackend } = await import('../../backend/resolve.js')
       const backend = await createBackend()
-      const handle = await backend.connect({ target: args.port, verbose: args.verbose })
+      // Non-exclusive: the monitor is a long-lived live view. Holding an
+      // exclusive lease would lock the device out of every other command for
+      // the whole session; instead let other commands operate it concurrently.
+      const handle = await backend.connect({
+        target: args.port,
+        verbose: args.verbose,
+        exclusive: false,
+      })
       try {
         const { renderMonitor } = await import('./app.js')
         await renderMonitor(handle, { verbose: args.detailed, backendMode: backend.mode })
