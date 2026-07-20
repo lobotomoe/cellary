@@ -55,6 +55,8 @@ export const RPC_ERRORS = {
   OPERATION_FAILED: -32002,
   /** Device is leased by another client. */
   DEVICE_LEASED: -32003,
+  /** Method is disabled by daemon policy (e.g. shell access not enabled). */
+  METHOD_FORBIDDEN: -32004,
 } as const
 
 // ── Serializable device types ──────────────────────────────────────────────

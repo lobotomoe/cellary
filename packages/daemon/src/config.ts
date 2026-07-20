@@ -29,6 +29,13 @@ const envSchema = z.object({
    * this — the daemon takes a number to avoid platform-specific name lookup.
    */
   CELLARY_SOCKET_GID: z.coerce.number().int().nonnegative().optional(),
+  /**
+   * Enable arbitrary shell access (system.shell + interactive shell stream).
+   * Off by default: shell is device RCE, so it must be opted into explicitly
+   * rather than being reachable by anyone in the socket group. Accepts
+   * 'true'/'1'; anything else (including unset) is off.
+   */
+  CELLARY_ALLOW_SHELL: z.string().optional(),
 })
 
 const parsed = envSchema.safeParse(process.env)
@@ -51,9 +58,14 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_AUDIT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_AUDIT_RETENTION_DAYS = 365
 
+const allowShell =
+  parsed.data.CELLARY_ALLOW_SHELL === 'true' || parsed.data.CELLARY_ALLOW_SHELL === '1'
+
 export const config = {
   logLevel: parsed.data.CELLARY_LOG_LEVEL ?? 'info',
   socketGid: parsed.data.CELLARY_SOCKET_GID,
+  /** Whether arbitrary shell access (system.shell / shell stream) is permitted. */
+  allowShell,
   /** File the device-comms audit is appended to. */
   auditFile: join(auditDir, 'comms.jsonl'),
   /** Size at which the audit file rotates. */

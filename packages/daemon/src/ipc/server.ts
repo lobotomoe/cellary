@@ -312,6 +312,7 @@ function getErrorCode(err: unknown): number {
     // Map well-known error names to RPC codes
     if (err.name === 'DeviceNotReadyError') return RPC_ERRORS.DEVICE_NOT_FOUND
     if (err.name === 'DeviceLeasedError') return RPC_ERRORS.DEVICE_LEASED
+    if (err.name === 'MethodForbiddenError') return RPC_ERRORS.METHOD_FORBIDDEN
     if (err.name === 'NotSupportedError') return RPC_ERRORS.SERVICE_UNAVAILABLE
     if (err.name === 'TransportError') return RPC_ERRORS.OPERATION_FAILED
     if (err.name === 'TimeoutError') return RPC_ERRORS.OPERATION_FAILED

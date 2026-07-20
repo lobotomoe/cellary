@@ -17,6 +17,7 @@ import { pino } from 'pino'
 
 import { AuditReader } from './audit-reader.js'
 import { FileAuditSink } from './audit-sink.js'
+import { type AuthzPolicy, assertMethodAllowed } from './authz.js'
 import { config } from './config.js'
 import { DeviceManager } from './device-manager.js'
 import { EventBridge } from './event-bridge.js'
@@ -78,6 +79,11 @@ const log = wrapPino(pinoLog)
 
 const socketPath = getSocketPath()
 
+// Per-method authorization policy. Shell access (device RCE) is off unless the
+// operator opted in, so a client in the socket group cannot run arbitrary
+// commands just by connecting.
+const authzPolicy: AuthzPolicy = { allowShell: config.allowShell }
+
 let eventBridge: EventBridge
 let deviceManager: DeviceManager
 let streamManager: StreamManager
@@ -88,6 +94,9 @@ const server = new IpcServer({
   onWarning: (message) => log.warn(message),
 
   onRequest: async (method, params, clientId) => {
+    // Authorization gate: privileged methods are refused unless enabled.
+    assertMethodAllowed(method, authzPolicy)
+
     // ── Fleet management ─────────────────────────────────────────────
     if (method === 'devices.list') {
       return deviceManager.listDevices()
