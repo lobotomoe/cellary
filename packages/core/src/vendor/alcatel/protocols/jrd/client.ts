@@ -1,8 +1,10 @@
 import * as net from 'node:net'
 import { z } from 'zod'
 
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import { type HttpResponse, httpPost, parseHttpResponse } from '../../../../transport/http.js'
 import type { UsbNetTransport } from '../../../../transport/usb-net.js'
+import { maskJrdSecrets } from './mask.js'
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -51,14 +53,33 @@ export interface JrdClient {
  * - Endpoint format: POST /jrd/webapi?api=<MethodName>
  */
 export class JrdHttpClient implements JrdClient {
+  private readonly _audit: AuditSink
+
   constructor(
     readonly baseUrl: string,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
-  ) {}
+    auditSink?: AuditSink,
+  ) {
+    this._audit = auditSink ?? noopAuditSink
+  }
 
   async call(method: string, params: unknown = null): Promise<unknown> {
     const body = buildJrdBody(method, params)
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'jrd',
+      direction: 'tx',
+      text: `${method} ${maskJrdSecrets(body)}`,
+    })
+
     const response = await this.request(method, body)
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'jrd',
+      direction: 'rx',
+      text: maskJrdSecrets(response.body),
+    })
+
     if (response.status < 200 || response.status >= 300) {
       throw new Error(`JRD HTTP ${response.status} from ${method}`)
     }
@@ -134,18 +155,39 @@ export class JrdHttpClient implements JrdClient {
  * Works cross-platform without any OS network configuration.
  */
 export class JrdUsbClient implements JrdClient {
-  constructor(private readonly transport: UsbNetTransport) {}
+  private readonly _audit: AuditSink
+
+  constructor(
+    private readonly transport: UsbNetTransport,
+    auditSink?: AuditSink,
+  ) {
+    this._audit = auditSink ?? noopAuditSink
+  }
 
   async call(method: string, params: unknown = null): Promise<unknown> {
     const body = buildJrdBody(method, params)
     const path = `/jrd/webapi?api=${method}`
     const gatewayIp = this.transport.gatewayIp
 
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'jrd',
+      direction: 'tx',
+      text: `${method} ${maskJrdSecrets(body)}`,
+    })
+
     const response = await httpPost(this.transport, path, body, {
       headers: {
         Referer: `http://${gatewayIp}/`,
         _TclRequestVerificationKey: VERIFICATION_KEY,
       },
+    })
+
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'jrd',
+      direction: 'rx',
+      text: maskJrdSecrets(response.body),
     })
 
     if (response.status < 200 || response.status >= 300) {

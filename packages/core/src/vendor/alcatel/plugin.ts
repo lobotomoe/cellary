@@ -45,7 +45,7 @@ export const alcatelPlugin: VendorPlugin = {
     // (LIBUSB_ERROR_ACCESS) and is disrupted by. Requires the interface to hold
     // an IP on the gateway subnet -- the device's DHCP is unreliable, so this may
     // be a manual assignment (see vendor/alcatel/README.md).
-    const httpClient = new JrdHttpClient(transport.url)
+    const httpClient = new JrdHttpClient(transport.url, undefined, opts?.auditSink)
     try {
       await httpClient.call('GetSystemInfo') // probe
       log.info('JRD API reachable via OS HTTP stack', { gateway: gatewayIp })
@@ -68,7 +68,7 @@ export const alcatelPlugin: VendorPlugin = {
     })
     try {
       await ecm.open()
-      const usbClient = new JrdUsbClient(ecm)
+      const usbClient = new JrdUsbClient(ecm, opts?.auditSink)
       await usbClient.call('GetSystemInfo') // probe
       log.info('JRD API reachable via ECM bridge', { gateway: ecm.gatewayIp })
       return { adapters: [new JrdAdapter(usbClient, childLog)] }

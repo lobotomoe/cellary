@@ -9,6 +9,7 @@
 
 import { z } from 'zod'
 
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import { DiscoveryError } from '../../../../errors.js'
 import { hiLinkGet, hiLinkPost, XML_HEADER } from './http.js'
 import type { HiLinkCredentials, HiLinkSession } from './types.js'
@@ -98,6 +99,7 @@ export async function loginHiLink(
   baseUrl: string,
   session: HiLinkSession,
   credentials: HiLinkCredentials,
+  auditSink: AuditSink = noopAuditSink,
 ): Promise<{
   nextCsrfToken: string | undefined
   errorCode: string | undefined
@@ -118,7 +120,7 @@ export async function loginHiLink(
     body: respBody,
     nextCsrfToken,
     newSessionId,
-  } = await hiLinkPost(baseUrl, session, 'api/user/login', body)
+  } = await hiLinkPost(baseUrl, session, 'api/user/login', body, auditSink)
   const errorCode = extractHiLinkErrorCode(respBody)
 
   return { nextCsrfToken, errorCode, newSessionId }

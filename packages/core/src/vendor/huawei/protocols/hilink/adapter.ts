@@ -1,4 +1,5 @@
 import { EventEmitter } from 'node:events'
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import type { Logger } from '../../../../logger.js'
 import { noopLogger } from '../../../../logger.js'
 import type {
@@ -70,6 +71,7 @@ export class HiLinkAdapter extends EventEmitter implements ProtocolAdapter {
   private readonly poller: HiLinkPoller
   private readonly credentials: HiLinkCredentials | undefined
   private readonly _log: Logger
+  private readonly _audit: AuditSink
   private _authPromise: Promise<string> | undefined
   private _authTimestamp = 0
 
@@ -77,12 +79,14 @@ export class HiLinkAdapter extends EventEmitter implements ProtocolAdapter {
     readonly baseUrl: string,
     credentials?: HiLinkCredentials | undefined,
     logger?: Logger | undefined,
+    auditSink?: AuditSink | undefined,
   ) {
     super()
     this.credentials = credentials
     this._log = logger ?? noopLogger
+    this._audit = auditSink ?? noopAuditSink
 
-    const client = new HiLinkHttpClient(baseUrl)
+    const client = new HiLinkHttpClient(baseUrl, undefined, this._audit)
     const getAuthCookie = () => this.getAuthCookie()
     this.network = new HiLinkNetwork(client, getAuthCookie, this._log.child({ service: 'network' }))
     this.device = new HiLinkDevice(client, getAuthCookie, this._log.child({ service: 'device' }))
@@ -155,7 +159,12 @@ export class HiLinkAdapter extends EventEmitter implements ProtocolAdapter {
     }
 
     this._log.info('Authenticating', { baseUrl: this.baseUrl })
-    const { errorCode, newSessionId } = await loginHiLink(this.baseUrl, session, this.credentials)
+    const { errorCode, newSessionId } = await loginHiLink(
+      this.baseUrl,
+      session,
+      this.credentials,
+      this._audit,
+    )
 
     if (errorCode === undefined) {
       this._log.info('Authenticated', { hasNewSession: newSessionId !== undefined })

@@ -5,7 +5,9 @@
  * and Set-Cookie capture for session upgrades after login.
  */
 
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import { DiscoveryError } from '../../../../errors.js'
+import { maskHiLinkSecrets } from './mask.js'
 import type { HiLinkSession } from './types.js'
 
 const FETCH_TIMEOUT_MS = 10_000
@@ -43,9 +45,17 @@ export async function hiLinkPost(
   session: HiLinkSession,
   path: string,
   body: string,
+  auditSink: AuditSink = noopAuditSink,
 ): Promise<{ body: string; nextCsrfToken: string | undefined; newSessionId: string | undefined }> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
+
+  auditSink.record({
+    timestamp: Date.now(),
+    protocol: 'hilink',
+    direction: 'tx',
+    text: `POST ${path} ${maskHiLinkSecrets(body)}`,
+  })
 
   try {
     const response = await fetch(`${baseUrl}/${path}`, {
@@ -70,6 +80,12 @@ export async function hiLinkPost(
     const newSessionId = rawSessionId !== undefined ? `SessionID=${rawSessionId}` : undefined
 
     const respBody = await response.text()
+    auditSink.record({
+      timestamp: Date.now(),
+      protocol: 'hilink',
+      direction: 'rx',
+      text: maskHiLinkSecrets(respBody),
+    })
     return { body: respBody, nextCsrfToken, newSessionId }
   } catch (err: unknown) {
     if (err instanceof DiscoveryError) throw err

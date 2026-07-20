@@ -68,6 +68,7 @@ export const huaweiPlugin: VendorPlugin = {
           transport.url,
           HILINK_DEFAULT_CREDENTIALS,
           log.child({ adapter: 'hilink' }),
+          opts?.auditSink,
         ),
       ]
 
@@ -118,7 +119,12 @@ export const huaweiPlugin: VendorPlugin = {
     // Both protocols available: per-service priorities declared in serviceCapabilities()
     const adapters: ProtocolAdapter[] = hiLinkReachable
       ? [
-          new HiLinkAdapter(baseUrl, HILINK_DEFAULT_CREDENTIALS, log.child({ adapter: 'hilink' })),
+          new HiLinkAdapter(
+            baseUrl,
+            HILINK_DEFAULT_CREDENTIALS,
+            log.child({ adapter: 'hilink' }),
+            opts?.auditSink,
+          ),
           atAdapter,
         ]
       : [atAdapter]

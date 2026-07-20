@@ -1,4 +1,6 @@
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import { fetchHiLinkSession } from './index.js'
+import { maskHiLinkSecrets } from './mask.js'
 
 const DEFAULT_TIMEOUT_MS = 10_000
 
@@ -9,10 +11,15 @@ const DEFAULT_TIMEOUT_MS = 10_000
  * that was previously duplicated across every HiLink service file.
  */
 export class HiLinkHttpClient {
+  private readonly _audit: AuditSink
+
   constructor(
     readonly baseUrl: string,
     private readonly timeoutMs = DEFAULT_TIMEOUT_MS,
-  ) {}
+    auditSink?: AuditSink,
+  ) {
+    this._audit = auditSink ?? noopAuditSink
+  }
 
   /** GET with an unauthenticated session (session cookie + CSRF token). */
   async get(path: string, timeoutMs?: number | undefined): Promise<string> {
@@ -74,21 +81,35 @@ export class HiLinkHttpClient {
       readonly timeoutMs?: number | undefined
     },
   ): Promise<{ text: string; responseHeaders: Headers }> {
+    const method = init.method ?? 'GET'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), init.timeoutMs ?? this.timeoutMs)
 
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'hilink',
+      direction: 'tx',
+      text: `${method} ${path} ${maskHiLinkSecrets(init.body ?? '')}`.trimEnd(),
+    })
+
     try {
       const fetchInit: RequestInit = {
-        method: init.method ?? 'GET',
+        method,
         signal: controller.signal,
         headers: init.headers,
       }
       if (init.body !== undefined) fetchInit.body = init.body
       const response = await globalThis.fetch(`${this.baseUrl}/${path}`, fetchInit)
+      const text = await response.text()
+      this._audit.record({
+        timestamp: Date.now(),
+        protocol: 'hilink',
+        direction: 'rx',
+        text: maskHiLinkSecrets(text),
+      })
       if (!response.ok) {
         throw new Error(`HTTP ${response.status}`)
       }
-      const text = await response.text()
       return { text, responseHeaders: response.headers }
     } catch (err: unknown) {
       throw new Error(`HiLink request to ${path} failed`, { cause: err })
