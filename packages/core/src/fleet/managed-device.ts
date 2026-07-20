@@ -37,6 +37,15 @@ export interface ManagedDevice {
   retryTimer?: ReturnType<typeof setTimeout> | undefined
   /** Assessment timeout timer. Fires when a device stays in critical assessing state too long. */
   assessmentTimer?: ReturnType<typeof setTimeout> | undefined
+  /**
+   * Set when assessment timed out and the device was parked in a recoverable
+   * `error` stage. It marks the error as "stalled waiting for the device to
+   * leave a critical state" so a later favourable `device:state-changed` can
+   * re-drive assessment in place -- without this flag the pool cannot tell an
+   * assessment stall apart from a pipeline error (which recovers via its own
+   * retry timer) and would leave a recovered device dead-ended.
+   */
+  assessmentStalled?: boolean | undefined
   /** How many times the pipeline has been retried after recoverable errors. */
   retryCount: number
 }

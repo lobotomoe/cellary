@@ -321,8 +321,29 @@ export class ModemPool extends EventEmitter {
 
     device.session = session
 
+    const { readiness } = device
+
     // If in assessing stage, re-evaluate whether to proceed
-    if (device.readiness.stage === 'assessing') {
+    if (readiness.stage === 'assessing') {
+      evaluateAssessment(this._pipelineCtx, device, session, analysis)
+      return
+    }
+
+    // Recover a device that stalled in assessment: the assessment timeout parked
+    // it in a recoverable error, but before the timeout this very signal
+    // (device:state-changed) would have driven it forward. Once it leaves the
+    // critical state and a modem is available again, resume assessment in place
+    // -- otherwise a device that recovers on the bus (without a physical replug)
+    // is dead-ended despite advertising recoverable: true.
+    if (
+      readiness.stage === 'error' &&
+      readiness.recoverable &&
+      device.assessmentStalled === true &&
+      analysis.severity !== 'critical' &&
+      session.currentCycle?.modem !== undefined
+    ) {
+      this._log.info('Device left critical state, resuming assessment', { name: device.name })
+      device.assessmentStalled = false
       evaluateAssessment(this._pipelineCtx, device, session, analysis)
     }
   }

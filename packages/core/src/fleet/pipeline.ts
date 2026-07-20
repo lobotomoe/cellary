@@ -62,10 +62,14 @@ export function startAssessment(
   analysis: DeviceStateAnalysis,
 ): void {
   ctx.clearAssessmentTimer(device)
+  // Fresh assessment supersedes any prior stall marker.
+  device.assessmentStalled = false
   ctx.setReadiness(device, { stage: 'assessing', analysis })
 
-  // Start timeout: if device stays in critical assessing state too long,
-  // transition to error so the retry mechanism can kick in.
+  // Start timeout: if the device stays in a critical assessing state too long,
+  // park it in a recoverable error. It is not a dead end -- a later favourable
+  // device:state-changed re-drives assessment (see ModemPool._onStateChanged),
+  // and a physical replug recovers it via the offline path.
   const generation = device.pipelineGeneration
   device.assessmentTimer = setTimeout(() => {
     device.assessmentTimer = undefined
@@ -73,6 +77,7 @@ export function startAssessment(
     if (device.readiness.stage !== 'assessing') return
 
     ctx.log.warn('Assessment timed out', { name: device.name, description: analysis.description })
+    device.assessmentStalled = true
     ctx.setReadiness(device, {
       stage: 'error',
       error: new Error(`Device stuck in critical state: ${analysis.description}`),
