@@ -85,7 +85,7 @@ export interface ModemOptions {
   /**
    * Reconnect behavior after an unexpected disconnect.
    *
-   * - `true` (default) — auto-reconnect with built-in defaults (3 s delay, infinite retries)
+   * - `true` (default) — auto-reconnect with built-in defaults (1 s initial delay, up to 20 attempts)
    * - `false` — no auto-reconnect; only `disconnect` event is emitted
    * - object — custom settings; any omitted fields use their defaults
    */
