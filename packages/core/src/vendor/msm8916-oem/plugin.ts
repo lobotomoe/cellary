@@ -69,7 +69,11 @@ export const msm8916OemPlugin: VendorPlugin = {
         // Use default host from RNDIS gateway detection
       }
 
-      const client = new MifiClient({ vendorId: QUALCOMM_VID, productId: MIFI_PIDS.rndis }, host)
+      const client = new MifiClient(
+        { vendorId: QUALCOMM_VID, productId: MIFI_PIDS.rndis },
+        host,
+        opts?.auditSink,
+      )
       await client.open()
 
       return { adapters: [new MifiAdapter(client)] }

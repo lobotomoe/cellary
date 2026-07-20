@@ -7,11 +7,13 @@
  */
 import type { z } from 'zod'
 
+import { type AuditSink, noopAuditSink } from '../../../../audit.js'
 import { CellaryError } from '../../../../errors.js'
 import { httpPost } from '../../../../transport/rndis/http.js'
 import { RndisTransport, type RndisTransportOptions } from '../../../../transport/rndis/index.js'
 import type { MifiRawEnvelope } from './api-types.js'
 import { mifiEnvelopeSchema, mifiRawEnvelopeSchema } from './api-types.js'
+import { maskMifiSecrets } from './mask.js'
 
 export class MifiApiError extends CellaryError {
   override name = 'MifiApiError'
@@ -29,11 +31,13 @@ export class MifiApiError extends CellaryError {
 export class MifiClient {
   private readonly _transportOptions: RndisTransportOptions
   private readonly _host: string | undefined
+  private readonly _audit: AuditSink
   private _transport: RndisTransport
 
-  constructor(options: RndisTransportOptions, host?: string | undefined) {
+  constructor(options: RndisTransportOptions, host?: string | undefined, auditSink?: AuditSink) {
     this._transportOptions = options
     this._host = host
+    this._audit = auditSink ?? noopAuditSink
     this._transport = new RndisTransport(options)
   }
 
@@ -125,7 +129,20 @@ export class MifiClient {
     params?: Record<string, unknown> | undefined,
   ): Promise<unknown> {
     const body = JSON.stringify({ funcNo, ...params })
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'mifi',
+      direction: 'tx',
+      text: `POST /ajax ${maskMifiSecrets(body)}`,
+    })
+
     const response = await httpPost(this._transport, '/ajax', body, { host: this._host })
+    this._audit.record({
+      timestamp: Date.now(),
+      protocol: 'mifi',
+      direction: 'rx',
+      text: maskMifiSecrets(response.body),
+    })
 
     if (response.status !== 200) {
       throw new MifiApiError(funcNo, `HTTP ${response.status} ${response.statusText}`)
