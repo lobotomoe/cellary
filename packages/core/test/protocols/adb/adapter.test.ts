@@ -1,8 +1,9 @@
 import { describe, expect, it, vi } from 'vitest'
 
 import type { System } from '../../../src/protocols/adapter.js'
-import type { AdbShell } from '../../../src/protocols/adb/shell.js'
+import { AdbShell } from '../../../src/protocols/adb/shell.js'
 import type { AdbAtBridge, ShellResult } from '../../../src/protocols/adb/types.js'
+import type { AdbConnectionLike } from '../../../src/protocols/adb/wire.js'
 
 /** A System that exposes the optional IMEI/unlock methods as required. */
 interface ImeiSystem extends System {
@@ -65,18 +66,24 @@ describe('TTL parsing from iptables output', () => {
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 function createMockShell(responses: Map<string, ShellResult>): AdbShell {
-  return {
-    exec: vi.fn(async (cmd: string): Promise<ShellResult> => {
-      return responses.get(cmd) ?? { stdout: '', exitCode: 0 }
-    }),
-    execWithStatus: vi.fn(async (cmd: string): Promise<ShellResult> => {
-      return responses.get(cmd) ?? { stdout: '', exitCode: 0 }
-    }),
-    ping: vi.fn(async () => true),
+  // A real AdbShell over a stub connection: AdbShell has private fields, so a
+  // structural literal can't satisfy it. The adapter never opens a stream in
+  // these unit tests (the AT bridge is injected separately), so openStream is a
+  // deliberate rejection.
+  const connection: AdbConnectionLike = {
+    openShell: vi.fn(async () => ''),
+    openStream: vi.fn(() => Promise.reject(new Error('openStream not used in adapter unit tests'))),
+    onDisconnect: vi.fn(),
     close: vi.fn(async () => {}),
     isOpen: true,
-    connection: {} as import('../../../src/protocols/adb/wire.js').AdbConnection,
-  } satisfies AdbShell
+  }
+  const shell = new AdbShell(connection)
+  const respond = async (cmd: string): Promise<ShellResult> =>
+    responses.get(cmd) ?? { stdout: '', exitCode: 0 }
+  vi.spyOn(shell, 'exec').mockImplementation(respond)
+  vi.spyOn(shell, 'execWithStatus').mockImplementation(respond)
+  vi.spyOn(shell, 'ping').mockResolvedValue(true)
+  return shell
 }
 
 function createMockBridge(responses: Map<string, string>): AdbAtBridge {

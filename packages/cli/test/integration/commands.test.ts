@@ -8,6 +8,7 @@
  *   pnpm -C packages/cli test:integration
  */
 
+import { runCommand } from 'citty'
 import { describe, expect, it } from 'vitest'
 
 import { captureStdout, probeModem } from './helpers.js'
@@ -22,9 +23,9 @@ const hasAtInterface = probe !== undefined && probe.modem.mode !== 'http'
 describe.runIf(hasModem)('devices', () => {
   it('lists connected modems', async () => {
     const { default: devicesCommand } = await import('../../src/commands/devices.js')
-    const output = await captureStdout(() =>
-      devicesCommand.run({ args: { verbose: false, ids: false } }),
-    )
+    const output = await captureStdout(async () => {
+      await runCommand(devicesCommand, { rawArgs: [] })
+    })
 
     expect(output).not.toContain('No modems found')
     // Table should have at least one data row (header + device)
@@ -39,11 +40,15 @@ describe.runIf(hasModem)('devices', () => {
 // ── Commands that take --port ──────────────────────────────────────────────
 
 describe.runIf(hasModem)('CLI commands (real modem)', () => {
+  // Serial modems carry an explicit port path; others auto-detect (no --port).
   const port = probe?.port
+  const portRawArgs = port !== undefined ? ['--port', port] : []
 
   it('info — shows device overview', async () => {
     const { default: infoCommand } = await import('../../src/commands/info.js')
-    const output = await captureStdout(() => infoCommand.run({ args: { port, verbose: false } }))
+    const output = await captureStdout(async () => {
+      await runCommand(infoCommand, { rawArgs: portRawArgs })
+    })
 
     // Signal is always available regardless of protocol/auth
     expect(output).toContain('Signal')
@@ -51,7 +56,9 @@ describe.runIf(hasModem)('CLI commands (real modem)', () => {
 
   it('signal — shows signal strength', async () => {
     const { default: signalCommand } = await import('../../src/commands/signal.js')
-    const output = await captureStdout(() => signalCommand.run({ args: { port, verbose: false } }))
+    const output = await captureStdout(async () => {
+      await runCommand(signalCommand, { rawArgs: portRawArgs })
+    })
 
     expect(output).toContain('dBm')
   })
@@ -61,9 +68,9 @@ describe.runIf(hasModem)('CLI commands (real modem)', () => {
     { timeout: 45_000 },
     async () => {
       const { default: capabilitiesCommand } = await import('../../src/commands/capabilities.js')
-      const output = await captureStdout(() =>
-        capabilitiesCommand.run({ args: { port, verbose: false } }),
-      )
+      const output = await captureStdout(async () => {
+        await runCommand(capabilitiesCommand, { rawArgs: portRawArgs })
+      })
 
       // All AT modems should have at least basic SMS and network capabilities
       expect(output).toContain('sms:')
@@ -73,9 +80,9 @@ describe.runIf(hasModem)('CLI commands (real modem)', () => {
 
   it('diagnose — runs voice diagnostics', async () => {
     const { default: diagnoseCommand } = await import('../../src/commands/diagnose.js')
-    const output = await captureStdout(() =>
-      diagnoseCommand.run({ args: { port, verbose: false } }),
-    )
+    const output = await captureStdout(async () => {
+      await runCommand(diagnoseCommand, { rawArgs: portRawArgs })
+    })
 
     expect(output).toContain('Phone activity')
     expect(output).toContain('CS registration')

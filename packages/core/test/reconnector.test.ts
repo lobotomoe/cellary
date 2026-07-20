@@ -24,7 +24,7 @@ function fakeAdapter(kind: string) {
   }
 }
 
-function callbacks(overrides: Partial<SupervisorCallbacks> = {}): SupervisorCallbacks & {
+function callbacks(overrides: { isClosed?: () => boolean } = {}): SupervisorCallbacks & {
   onFirstDisconnect: ReturnType<typeof vi.fn>
   onReconnect: ReturnType<typeof vi.fn>
   onFailed: ReturnType<typeof vi.fn>

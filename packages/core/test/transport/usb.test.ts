@@ -24,7 +24,9 @@ const { MockInEndpoint, MockOutEndpoint, mockFindByIds } = vi.hoisted(() => {
 
     constructor(address: number) {
       this.address = address
-      this.on.mockImplementation((event: string, handler: (...args: never[]) => void) => {
+      // node-usb dispatches 'data' with a Buffer and 'error' with an Error;
+      // the captured handler is stored in the slot matching the event.
+      this.on.mockImplementation((event: string, handler: DataHandler & ErrorHandler) => {
         if (event === 'data') this._dataHandler = handler
         if (event === 'error') this._errorHandler = handler
       })

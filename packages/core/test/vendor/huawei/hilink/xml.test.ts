@@ -78,10 +78,14 @@ describe('extractHiLinkErrorCode', () => {
   })
 })
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null
+}
+
 /** Extract a nested record from a raw XML parse result. */
 function extractRecord(parsed: Record<string, unknown>, key: string): Record<string, unknown> {
   const value = parsed[key]
-  if (typeof value !== 'object' || value === null) {
+  if (!isRecord(value)) {
     throw new Error(`Expected object at key '${key}', got ${typeof value}`)
   }
   return value

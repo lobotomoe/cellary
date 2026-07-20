@@ -32,6 +32,10 @@ import {
 } from './constants.js'
 import type { AdbMessage, AdbStream } from './types.js'
 
+// Re-export AdbStream: it is part of the AdbConnectionLike contract
+// (openStream resolves to it), so consumers of this module need the type.
+export type { AdbStream } from './types.js'
+
 // ── Serialization ───────────────────────────────────────────────────────────
 
 function checksum(data: Buffer): number {

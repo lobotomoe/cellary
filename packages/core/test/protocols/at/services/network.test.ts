@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ATChannel } from '../../../../src/protocols/at/channel/at-channel.js'
+import { requireAtConfig } from '../../../../src/protocols/at/index.js'
 import { genericProfile } from '../../../../src/protocols/at/profile.js'
 import { NetworkModule } from '../../../../src/protocols/at/services/network.js'
 import { MockTransport } from '../../../../src/transport/mock.js'
+
+const genericAtConfig = requireAtConfig(genericProfile)
 
 describe('NetworkModule', () => {
   let transport: MockTransport
@@ -13,10 +16,10 @@ describe('NetworkModule', () => {
     transport = new MockTransport()
     await transport.open()
     channel = new ATChannel(transport, {
-      urcPrefixes: genericProfile.urcPrefixes,
+      urcPrefixes: genericAtConfig.urcPrefixes,
       defaultTimeout: 5000,
     })
-    network = new NetworkModule(channel, genericProfile)
+    network = new NetworkModule(channel, genericAtConfig)
   })
 
   afterEach(() => {

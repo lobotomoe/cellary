@@ -1,3 +1,4 @@
+import type { EventEmitter } from 'node:events'
 import { describe, expect, it, vi } from 'vitest'
 import { Modem } from '../src/modem.js'
 import { MockTransport } from '../src/transport/mock.js'
@@ -157,7 +158,10 @@ describe('Modem event forwarding', () => {
   it('does not emit raw -- only debug:raw', async () => {
     const { modem, transport } = await openMock()
     const handler = vi.fn()
-    modem.on('raw' as string, handler)
+    // 'raw' is not part of ModemEventMap; register via the base EventEmitter
+    // API to prove the modem never emits it (it emits 'debug:raw' instead).
+    const emitter: EventEmitter = modem
+    emitter.on('raw', handler)
 
     transport.receive('\r\nRING\r\n')
 

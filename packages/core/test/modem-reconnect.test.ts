@@ -78,11 +78,14 @@ describe('Modem reconnect', () => {
       const events: string[] = []
       modem.on('reconnect', () => events.push('reconnect'))
 
+      // Capture the real open() before spying so the success path opens the
+      // transport for real (sets isOpen), letting the post-reconnect AT probe write.
+      const realOpen = transport.open.bind(transport)
       let attempt = 0
       vi.spyOn(transport, 'open').mockImplementation(async () => {
         attempt++
         if (attempt < 3) throw new Error('not yet')
-        transport._isOpen = true
+        await realOpen()
       })
 
       transport.simulateDisconnect()
@@ -123,7 +126,7 @@ describe('Modem reconnect', () => {
       transport.simulateDisconnect()
       await vi.advanceTimersByTimeAsync(600) // one attempt
 
-      modem._closed = true // simulate explicit close mid-retry
+      await modem.close() // explicit close mid-retry
 
       await vi.advanceTimersByTimeAsync(3_000) // remaining attempts skipped
 

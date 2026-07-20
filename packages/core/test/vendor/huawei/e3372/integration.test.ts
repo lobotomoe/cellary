@@ -20,19 +20,23 @@ const SOCKET_PATH = '/var/run/cellaryd.sock'
 const REQUEST_TIMEOUT_MS = 10_000
 const HUAWEI_VID = 0x12d1
 
-interface DeviceInfo {
-  deviceId: string
-  vendorId: number
-  name: string
-  stage: string
-  modelName?: string
-  discovery?: {
-    mode: string
-    productId: number
-    busNumber?: number
-    portNumbers?: number[]
-  }
-}
+const deviceInfoSchema = z.object({
+  deviceId: z.string(),
+  vendorId: z.number(),
+  name: z.string(),
+  stage: z.string(),
+  modelName: z.string().optional(),
+  discovery: z
+    .object({
+      mode: z.string(),
+      productId: z.number(),
+      busNumber: z.number().optional(),
+      portNumbers: z.array(z.number()).optional(),
+    })
+    .optional(),
+})
+
+type DeviceInfo = z.infer<typeof deviceInfoSchema>
 
 /** Lightweight JSON-RPC client for integration tests. */
 class TestIpcClient {
@@ -136,24 +140,7 @@ async function probeE3372(): Promise<{ deviceId: string; device: DeviceInfo } | 
     await client.connect()
     const raw = await client.call('devices.list')
     client.disconnect()
-    const deviceInfoSchema = z.array(
-      z.object({
-        deviceId: z.string(),
-        vendorId: z.number(),
-        name: z.string(),
-        stage: z.string(),
-        modelName: z.string().optional(),
-        discovery: z
-          .object({
-            mode: z.string(),
-            productId: z.number(),
-            busNumber: z.number().optional(),
-            portNumbers: z.array(z.number()).optional(),
-          })
-          .optional(),
-      }),
-    )
-    const devices = deviceInfoSchema.parse(raw)
+    const devices = z.array(deviceInfoSchema).parse(raw)
     const huawei = devices.find((d) => d.vendorId === HUAWEI_VID && d.modelName?.includes('E3372'))
     if (huawei === undefined) return undefined
     return { deviceId: huawei.deviceId, device: huawei }

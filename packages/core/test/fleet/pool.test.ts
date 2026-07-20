@@ -1,4 +1,4 @@
-import { EventEmitter } from 'node:events'
+import type { EventEmitter } from 'node:events'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // ── Mock the observer + provisioner boundary ────────────────────────────────
@@ -8,7 +8,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // provisioner (so the pipeline never touches real USB). Modem.connectFromPrepared
 // is stubbed per-test via vi.spyOn.
 
-const observerHolder = vi.hoisted(() => ({ current: undefined as EventEmitter | undefined }))
+const observerHolder = vi.hoisted((): { current: EventEmitter | undefined } => ({
+  current: undefined,
+}))
 
 vi.mock('../../src/discovery/observer.js', async () => {
   const { EventEmitter: EE } = await import('node:events')
@@ -33,6 +35,8 @@ vi.mock('../../src/discovery/provisioner.js', async (importActual) => {
 import { provision } from '../../src/discovery/provisioner.js'
 import { ModemPool } from '../../src/fleet/pool.js'
 import { Modem } from '../../src/modem.js'
+import type { PrepReport } from '../../src/preparation/types.js'
+import { MockTransport } from '../../src/transport/mock.js'
 
 // ── Fixtures ────────────────────────────────────────────────────────────────
 
@@ -73,18 +77,33 @@ function analysis(severity: 'normal' | 'degraded' | 'critical', description: str
   }
 }
 
-/** A modem whose health check passed -- pipeline reaches the 'ready' stage. */
-function makeReadyModem() {
-  return Object.assign(new EventEmitter(), {
-    preparation: {
-      verdict: 'ready',
-      steps: [],
-      remediations: [],
-      limitations: [],
-      recommendations: [],
-    },
-    close: vi.fn(async () => {}),
+const READY_REPORT: PrepReport = {
+  device: { name: 'test', vendorId: VENDOR_ID, productId: 0x1506 },
+  verdict: 'ready',
+  steps: [],
+  limitations: [],
+  remediations: [],
+  recommendations: [],
+  durationMs: 0,
+}
+
+/**
+ * A modem whose health check passed -- pipeline reaches the 'ready' stage.
+ *
+ * A real Modem (via MockTransport, autoInit off so no AT traffic or timers) so
+ * the mocked connectFromPrepared returns the genuine type. open() leaves the
+ * preparation report undefined, so surface the ready verdict the pipeline reads.
+ */
+async function makeReadyModem(): Promise<Modem> {
+  const modem = await Modem.open({
+    path: '',
+    transport: new MockTransport(),
+    profile: { name: 'test', at: { initCommands: [], urcPrefixes: [] } },
+    autoInit: false,
+    reconnect: false,
   })
+  Object.defineProperty(modem, 'preparation', { get: () => READY_REPORT, configurable: true })
+  return modem
 }
 
 const ASSESSMENT_TIMEOUT_MS = 30_000
@@ -99,14 +118,12 @@ describe('ModemPool', () => {
   beforeEach(async () => {
     vi.useFakeTimers()
     vi.mocked(provision).mockResolvedValue({
-      transport: {},
-      driver: {},
-      profile: { name: 'test', vendorId: VENDOR_ID },
+      transport: { type: 'serial', path: '' },
+      driver: { kind: 'at' },
+      profile: { name: 'test' },
     })
     // Fresh modem per connect so distinct devices get distinct instances.
-    vi.spyOn(Modem, 'connectFromPrepared').mockImplementation(() =>
-      Promise.resolve(makeReadyModem()),
-    )
+    vi.spyOn(Modem, 'connectFromPrepared').mockImplementation(() => makeReadyModem())
 
     pool = new ModemPool({ resolvers: [] })
     const current = observerHolder.current

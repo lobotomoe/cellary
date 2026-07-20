@@ -51,6 +51,7 @@ vi.mock('serialport', () => ({
 import { provision } from '../../src/discovery/provisioner.js'
 import { discover, scanUsb } from '../../src/discovery/scanner.js'
 import { USB_MODEM_DATABASE } from '../../src/discovery/usb-ids.js'
+import type { DiscoveredModem } from '../../src/discovery/usb-types.js'
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -247,12 +248,15 @@ describe('scanner', () => {
       // directly rather than attempting mode switch.
       const huaweiEntry = USB_MODEM_DATABASE.find((e) => e.vendor === 0x12d1)
       if (huaweiEntry === undefined) throw new Error('expected Huawei entry in USB_MODEM_DATABASE')
-      const httpModem = {
-        mode: 'http' as const,
+      const httpModem: DiscoveredModem = {
+        mode: 'http',
         vendorId: 0x12d1,
         productId: 0x14db,
         name: 'Huawei',
+        deviceId: '12d1:1-2',
         entry: huaweiEntry,
+        busNumber: 1,
+        portNumbers: [2],
         url: 'http://192.168.8.1',
       }
 

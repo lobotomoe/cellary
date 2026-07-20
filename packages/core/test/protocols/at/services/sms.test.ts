@@ -1,8 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { ATChannel } from '../../../../src/protocols/at/channel/at-channel.js'
+import { requireAtConfig } from '../../../../src/protocols/at/index.js'
 import { genericProfile } from '../../../../src/protocols/at/profile.js'
 import { SmsModule } from '../../../../src/protocols/at/services/sms/index.js'
 import { MockTransport } from '../../../../src/transport/mock.js'
+
+const genericAtConfig = requireAtConfig(genericProfile)
 
 // ─── Test PDU hex strings ───────────────────────────────────────────────────
 // Generated with a reference encoder and verified via decodePduDeliver().
@@ -36,10 +39,10 @@ describe('SmsModule', () => {
     transport = new MockTransport()
     await transport.open()
     channel = new ATChannel(transport, {
-      urcPrefixes: genericProfile.urcPrefixes,
+      urcPrefixes: genericAtConfig.urcPrefixes,
       defaultTimeout: 5000,
     })
-    sms = new SmsModule(channel, genericProfile)
+    sms = new SmsModule(channel, genericAtConfig)
   })
 
   afterEach(() => {

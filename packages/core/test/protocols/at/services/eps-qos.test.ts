@@ -1,13 +1,16 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ATChannel } from '../../../../src/protocols/at/channel/at-channel.js'
+import { requireAtConfig } from '../../../../src/protocols/at/index.js'
 import { genericProfile } from '../../../../src/protocols/at/profile.js'
 import { DataModule } from '../../../../src/protocols/at/services/data.js'
 import { MockTransport } from '../../../../src/transport/mock.js'
 
+const genericAtConfig = requireAtConfig(genericProfile)
+
 function createModule(): { transport: MockTransport; channel: ATChannel; data: DataModule } {
   const transport = new MockTransport()
   const channel = new ATChannel(transport, { urcPrefixes: [], defaultTimeout: 5000 })
-  const data = new DataModule(channel, genericProfile.at)
+  const data = new DataModule(channel, genericAtConfig)
   return { transport, channel, data }
 }
 
