@@ -179,6 +179,8 @@ export const subscribeSchema = z.object({
 
 export const waitForReadySchema = z.object({
   timeoutMs: z.number().optional(),
+  /** Wait for this specific device (stable deviceId). Omit to wait for any. */
+  deviceId: z.string().optional(),
 })
 
 export const provisionSchema = z.object({

@@ -99,8 +99,17 @@ export class DeviceManager {
     return this._pool.devices.map((device) => toIpcDevice(device))
   }
 
-  /** Wait for any device to reach 'ready' stage. Returns deviceId. */
-  async waitForReady(timeoutMs?: number): Promise<string> {
+  /**
+   * Wait for a device to reach 'ready' stage. Returns its deviceId.
+   *
+   * With a deviceId, waits for that specific device (used by `--port`
+   * targeting); otherwise resolves on the first device to become ready.
+   */
+  async waitForReady(timeoutMs?: number, deviceId?: string): Promise<string> {
+    if (deviceId !== undefined) {
+      await this._pool.waitForDeviceId(deviceId, timeoutMs)
+      return deviceId
+    }
     const modem = await this._pool.waitForReady(timeoutMs)
     // Reverse-lookup: find the deviceId for this modem instance
     for (const [id, m] of this._modems) {

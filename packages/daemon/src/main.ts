@@ -90,8 +90,8 @@ const server = new IpcServer({
     }
 
     if (method === 'devices.waitForReady') {
-      const { timeoutMs } = waitForReadySchema.parse(params)
-      return deviceManager.waitForReady(timeoutMs)
+      const { timeoutMs, deviceId } = waitForReadySchema.parse(params)
+      return deviceManager.waitForReady(timeoutMs, deviceId)
     }
 
     if (method === 'devices.provision') {

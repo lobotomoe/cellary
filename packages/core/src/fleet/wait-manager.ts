@@ -116,6 +116,36 @@ export class WaitManager {
         ? (d: ManagedDevice) => d.vendorId === filter
         : (d: ManagedDevice) => d.name.toLowerCase().includes(filter.toLowerCase())
 
+    return this._waitForMatch(
+      matcher,
+      (timeout) => `Device matching '${filter}' did not become ready within ${timeout}ms`,
+      timeoutMs,
+    )
+  }
+
+  /**
+   * Wait for the device with an exact stable identity (deviceId) to reach
+   * 'ready' or 'degraded'. Unlike waitForDevice, this targets a single physical
+   * device -- two identical modems share a vendorId and name but not a deviceId.
+   */
+  waitForDeviceId(deviceId: string, timeoutMs?: number): Promise<Modem> {
+    return this._waitForMatch(
+      (d) => d.session.deviceId === deviceId,
+      (timeout) => `Device '${deviceId}' did not become ready within ${timeout}ms`,
+      timeoutMs,
+    )
+  }
+
+  /**
+   * Shared choreography for the targeted waits: resolve when a device the
+   * matcher accepts reaches ready/degraded, reject on timeout, and cancel
+   * cleanly when the pool stops.
+   */
+  private _waitForMatch(
+    matcher: (device: ManagedDevice) => boolean,
+    timeoutMessage: (timeout: number) => string,
+    timeoutMs?: number,
+  ): Promise<Modem> {
     // Check if already ready
     for (const device of this._deps.allDevices()) {
       if (!matcher(device)) continue
@@ -149,7 +179,7 @@ export class WaitManager {
         settled = true
         this._deps.offReadiness(onReadiness)
         this._pending.delete(cancel)
-        reject(new Error(`Device matching '${filter}' did not become ready within ${timeout}ms`))
+        reject(new Error(timeoutMessage(timeout)))
       }, timeout)
 
       const cancel = () => {

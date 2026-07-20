@@ -174,8 +174,8 @@ export class DaemonClient extends EventEmitter {
     return arr.map((item: unknown) => ipcDeviceInfoSchema.parse(item))
   }
 
-  async waitForReady(timeoutMs?: number): Promise<string> {
-    const raw = await this.call('devices.waitForReady', { timeoutMs })
+  async waitForReady(timeoutMs?: number, deviceId?: string): Promise<string> {
+    const raw = await this.call('devices.waitForReady', { timeoutMs, deviceId })
     if (typeof raw !== 'string') throw new Error('Expected string deviceId from waitForReady')
     return raw
   }

@@ -91,7 +91,7 @@ const ASSESSMENT_TIMEOUT_MS = 30_000
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
 
-describe('ModemPool assessment-timeout recovery (FLT-C2)', () => {
+describe('ModemPool', () => {
   let pool: ModemPool
   let observer: EventEmitter
   let stages: string[]
@@ -103,7 +103,10 @@ describe('ModemPool assessment-timeout recovery (FLT-C2)', () => {
       driver: {},
       profile: { name: 'test', vendorId: VENDOR_ID },
     })
-    vi.spyOn(Modem, 'connectFromPrepared').mockResolvedValue(makeReadyModem())
+    // Fresh modem per connect so distinct devices get distinct instances.
+    vi.spyOn(Modem, 'connectFromPrepared').mockImplementation(() =>
+      Promise.resolve(makeReadyModem()),
+    )
 
     pool = new ModemPool({ resolvers: [] })
     const current = observerHolder.current
@@ -125,49 +128,91 @@ describe('ModemPool assessment-timeout recovery (FLT-C2)', () => {
     observerHolder.current = undefined
   })
 
-  it('recovers a stalled device once it leaves the critical state', async () => {
-    // Device appears in a critical state (boot-loop): assessment defers.
-    observer.emit('device:appeared', makeSession(), analysis('critical', 'boot loop'))
-    expect(pool.byStage('assessing')).toHaveLength(1)
+  describe('assessment-timeout recovery (FLT-C2)', () => {
+    it('recovers a stalled device once it leaves the critical state', async () => {
+      // Device appears in a critical state (boot-loop): assessment defers.
+      observer.emit('device:appeared', makeSession(), analysis('critical', 'boot loop'))
+      expect(pool.byStage('assessing')).toHaveLength(1)
 
-    // Assessment times out -> parked in a recoverable error (not a dead end).
-    await vi.advanceTimersByTimeAsync(ASSESSMENT_TIMEOUT_MS)
-    const errored = pool.byStage('error')
-    expect(errored).toHaveLength(1)
-    expect(errored[0]?.readiness).toMatchObject({ stage: 'error', recoverable: true })
+      // Assessment times out -> parked in a recoverable error (not a dead end).
+      await vi.advanceTimersByTimeAsync(ASSESSMENT_TIMEOUT_MS)
+      const errored = pool.byStage('error')
+      expect(errored).toHaveLength(1)
+      expect(errored[0]?.readiness).toMatchObject({ stage: 'error', recoverable: true })
 
-    // The device leaves the critical state on the bus (no physical replug).
-    // The same device:state-changed signal that would have advanced assessment
-    // before the timeout must now un-stick the parked error.
-    observer.emit(
-      'device:state-changed',
-      makeSession(),
-      analysis('normal', 'stable'),
-      analysis('critical', 'boot loop'),
-    )
-    await vi.runAllTimersAsync()
+      // The device leaves the critical state on the bus (no physical replug).
+      // The same device:state-changed signal that would have advanced assessment
+      // before the timeout must now un-stick the parked error.
+      observer.emit(
+        'device:state-changed',
+        makeSession(),
+        analysis('normal', 'stable'),
+        analysis('critical', 'boot loop'),
+      )
+      await vi.runAllTimersAsync()
 
-    // It resumed assessment, ran the pipeline, and reached ready.
-    expect(stages).toContain('preparing')
-    expect(pool.byStage('ready')).toHaveLength(1)
+      // It resumed assessment, ran the pipeline, and reached ready.
+      expect(stages).toContain('preparing')
+      expect(pool.byStage('ready')).toHaveLength(1)
+    })
+
+    it('does not churn while the device stays critical', async () => {
+      observer.emit('device:appeared', makeSession(), analysis('critical', 'boot loop'))
+      await vi.advanceTimersByTimeAsync(ASSESSMENT_TIMEOUT_MS)
+      expect(pool.byStage('error')).toHaveLength(1)
+
+      // A still-critical state-changed must not re-drive the pipeline.
+      observer.emit(
+        'device:state-changed',
+        makeSession(),
+        analysis('critical', 'still boot looping'),
+        analysis('critical', 'boot loop'),
+      )
+      await vi.runAllTimersAsync()
+
+      expect(pool.byStage('error')).toHaveLength(1)
+      expect(stages).not.toContain('preparing')
+      expect(provision).not.toHaveBeenCalled()
+    })
   })
 
-  it('does not churn while the device stays critical', async () => {
-    observer.emit('device:appeared', makeSession(), analysis('critical', 'boot loop'))
-    await vi.advanceTimersByTimeAsync(ASSESSMENT_TIMEOUT_MS)
-    expect(pool.byStage('error')).toHaveLength(1)
+  describe('waitForDeviceId (CLI-C1)', () => {
+    it('resolves when the targeted device becomes ready', async () => {
+      const waiting = pool.waitForDeviceId(DEVICE_ID)
+      observer.emit('device:appeared', makeSession(), analysis('normal', 'stable'))
+      // Bounded flush: drive the microtask pipeline without firing the wait's
+      // own 60s timeout (runAllTimersAsync would fire it and reject the wait).
+      await vi.advanceTimersByTimeAsync(100)
 
-    // A still-critical state-changed must not re-drive the pipeline.
-    observer.emit(
-      'device:state-changed',
-      makeSession(),
-      analysis('critical', 'still boot looping'),
-      analysis('critical', 'boot loop'),
-    )
-    await vi.runAllTimersAsync()
+      const modem = await waiting
+      expect(modem).toBeDefined()
+      expect(pool.byStage('ready')).toHaveLength(1)
+    })
 
-    expect(pool.byStage('error')).toHaveLength(1)
-    expect(stages).not.toContain('preparing')
-    expect(provision).not.toHaveBeenCalled()
+    it('is not resolved by a different device becoming ready', async () => {
+      const waiting = pool.waitForDeviceId('12d1:9-9')
+      let settled = false
+      waiting.then(
+        () => {
+          settled = true
+        },
+        () => {
+          settled = true
+        },
+      )
+
+      observer.emit(
+        'device:appeared',
+        makeSession({ deviceId: 'other:1-1' }),
+        analysis('normal', 'stable'),
+      )
+      // Bounded flush (below the 60s wait timeout) so the unrelated device
+      // reaches ready while our targeted wait is still legitimately pending.
+      await vi.advanceTimersByTimeAsync(100)
+
+      // The unrelated device is ready, but our targeted wait stays pending.
+      expect(pool.byStage('ready')).toHaveLength(1)
+      expect(settled).toBe(false)
+    })
   })
 })

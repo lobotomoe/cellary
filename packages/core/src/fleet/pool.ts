@@ -172,6 +172,15 @@ export class ModemPool extends EventEmitter {
   }
 
   /**
+   * Wait for the device with an exact stable identity (deviceId) to reach
+   * 'ready' or 'degraded'. Targets a single physical device -- required when
+   * two identical modems (same vendorId/name) must be told apart.
+   */
+  waitForDeviceId(deviceId: string, timeoutMs?: number): Promise<Modem> {
+    return this._waitManager.waitForDeviceId(deviceId, timeoutMs)
+  }
+
+  /**
    * Restart the readiness pipeline for a device.
    *
    * Used after a USB reset: the device is still physically on the bus but

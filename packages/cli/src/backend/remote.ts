@@ -501,11 +501,12 @@ export class RemoteBackend implements Backend {
 
   // ── Device connection ─────────────────────────────────────────────────────
 
-  async connect(_options?: ConnectOptions): Promise<DeviceHandle> {
+  async connect(options?: ConnectOptions): Promise<DeviceHandle> {
     const client = await this._ensureClient()
 
-    // Wait for a ready device from the daemon
-    const deviceId = await client.waitForReady()
+    // Resolve the requested target (--port) to a daemon deviceId, then wait for
+    // that specific device. Without a target, wait for the first ready device.
+    const deviceId = await this._resolveTargetDevice(client, options?.target)
 
     // Fetch device info to get model name
     const devices = await client.listDevices()
@@ -569,6 +570,43 @@ export class RemoteBackend implements Backend {
   }
 
   // ── Private ───────────────────────────────────────────────────────────────
+
+  /**
+   * Resolve a --port target to a daemon deviceId.
+   *
+   * The target matches either a stable deviceId or a serial port path (for
+   * serial-mode devices). Resolving against the daemon's device list lets us
+   * fail loud with the available devices instead of silently connecting to the
+   * wrong one. Without a target, wait for whichever device becomes ready first.
+   */
+  private async _resolveTargetDevice(
+    client: DaemonClient,
+    target: string | undefined,
+  ): Promise<string> {
+    if (target === undefined) {
+      return client.waitForReady()
+    }
+
+    const devices = await client.listDevices()
+    const match = devices.find((d) => d.deviceId === target || d.discovery?.path === target)
+    if (match === undefined) {
+      const available =
+        devices.length > 0
+          ? devices
+              .map((d) => {
+                const path = d.discovery?.path
+                const via = path !== undefined ? ` (${path})` : ''
+                return `  ${d.deviceId}${via} — ${d.name} [${d.stage}]`
+              })
+              .join('\n')
+          : '  (none)'
+      throw new Error(
+        `No device matches --port "${target}" in daemon mode.\nAvailable devices:\n${available}`,
+      )
+    }
+
+    return client.waitForReady(undefined, match.deviceId)
+  }
 
   private async _ensureClient(): Promise<DaemonClient> {
     if (this._client !== undefined) return this._client
