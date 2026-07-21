@@ -8,20 +8,38 @@
 import { type AuditSink, noopAuditSink } from '../../audit.js'
 import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
-import { maskAtSecrets } from '../at/channel/mask.js'
 import { ADB_SHELL_TIMEOUT_MS } from './constants.js'
 import type { ShellResult } from './types.js'
 import type { AdbConnectionLike } from './wire.js'
+
+/** Redacts secrets from a command before it is logged/audited. Identity by default. */
+export type CommandMask = (command: string) => string
+
+const identityMask: CommandMask = (command) => command
 
 export class AdbShell {
   private readonly _conn: AdbConnectionLike
   private readonly _log: Logger
   private readonly _audit: AuditSink
+  private readonly _mask: CommandMask
 
-  constructor(conn: AdbConnectionLike, logger?: Logger, auditSink?: AuditSink) {
+  /**
+   * @param maskCommand redacts secrets from a command before it reaches the log
+   *   or audit. ADB is protocol-agnostic, so it does not know what may flow
+   *   through it: a caller that pushes secret-bearing commands (e.g. the vendor
+   *   AT bridge sending `AT+CPIN=<pin>` as a shell string) injects the masking.
+   *   Generic shell traffic carries no secrets and is recorded as-is.
+   */
+  constructor(
+    conn: AdbConnectionLike,
+    logger?: Logger,
+    auditSink?: AuditSink,
+    maskCommand?: CommandMask,
+  ) {
     this._conn = conn
     this._log = logger ?? noopLogger
     this._audit = auditSink ?? noopAuditSink
+    this._mask = maskCommand ?? identityMask
   }
 
   /** The underlying ADB connection (for opening persistent streams). */
@@ -37,9 +55,8 @@ export class AdbShell {
    */
   async exec(command: string, timeoutMs?: number): Promise<ShellResult> {
     const timeout = timeoutMs ?? ADB_SHELL_TIMEOUT_MS
-    // Shell commands can carry AT credentials (the vendor AT bridge sends
-    // `AT+CPIN=<pin>` as a shell string), so mask before logging or auditing.
-    const masked = maskAtSecrets(command)
+    // Mask before logging or auditing; the device still receives the raw command.
+    const masked = this._mask(command)
     this._log.debug('Shell exec', { command: masked, timeout })
     this._audit.record({ timestamp: Date.now(), protocol: 'adb', direction: 'tx', text: masked })
 
@@ -48,7 +65,7 @@ export class AdbShell {
       timestamp: Date.now(),
       protocol: 'adb',
       direction: 'rx',
-      text: maskAtSecrets(raw),
+      text: this._mask(raw),
     })
 
     // Try to extract exit code from the output.
@@ -72,7 +89,7 @@ export class AdbShell {
     const delimiter = '___ADB_EXIT___'
     const wrapped = `${command}; echo ${delimiter}$?`
 
-    const masked = maskAtSecrets(command)
+    const masked = this._mask(command)
     this._log.debug('Shell execWithStatus', { command: masked, timeout })
     this._audit.record({ timestamp: Date.now(), protocol: 'adb', direction: 'tx', text: masked })
 
@@ -97,7 +114,7 @@ export class AdbShell {
       timestamp: Date.now(),
       protocol: 'adb',
       direction: 'rx',
-      text: maskAtSecrets(result.stdout),
+      text: this._mask(result.stdout),
     })
     return result
   }

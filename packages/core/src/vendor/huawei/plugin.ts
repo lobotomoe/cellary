@@ -4,6 +4,7 @@ import type { Logger } from '../../logger.js'
 import { noopLogger } from '../../logger.js'
 import type { ProtocolAdapter, VendorPlugin } from '../../protocols/adapter.js'
 import type { AdbShell } from '../../protocols/adb/index.js'
+import { maskAtSecrets } from '../../protocols/at/channel/mask.js'
 import type { AtAdapter as AtAdapterType } from '../../protocols/at/index.js'
 import type { DeviceProfile, ModelInfo } from '../../types.js'
 import { diagnoseHuawei } from './diagnostics.js'
@@ -198,12 +199,15 @@ async function probeAndCreateAdb(
   const host = new URL(httpUrl).hostname
   log.info('Probing ADB', { host, port: ADB_PORT })
 
+  // The Balong AT bridge pushes AT commands (incl. CPIN/CPWD) as shell strings
+  // over ADB, so inject AT-secret masking; generic ADB stays AT-agnostic.
   const shell = await probeAdb(
     host,
     ADB_PORT,
     ADB_PROBE_TIMEOUT_MS,
     log.child({ probe: 'adb' }),
     auditSink,
+    maskAtSecrets,
   )
   if (shell === undefined) {
     log.info('ADB not available', { host })
