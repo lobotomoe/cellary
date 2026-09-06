@@ -15,12 +15,14 @@ const SERVICE_LABEL = 'com.cellary.daemon'
 
 // ── Shared helpers ──────────────────────────────────────────────────────────
 
+/**
+ * The node binary to run the daemon with: the one running this installer.
+ * Resolving via `which node` depends on the caller's PATH (which sudo resets)
+ * and guessing a path when that fails would write a service unit that can
+ * never start.
+ */
 function nodePath(): string {
-  try {
-    return execSync('which node', { encoding: 'utf-8' }).trim()
-  } catch {
-    return '/usr/local/bin/node'
-  }
+  return process.execPath
 }
 
 function daemonEntryPath(): string {
