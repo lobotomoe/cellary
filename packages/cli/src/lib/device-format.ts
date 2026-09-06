@@ -2,7 +2,7 @@
  * Shared display formatting for discovered modems.
  *
  * Single source of truth for device name resolution and bus location strings.
- * Used by devices, init, resolve-modem, and monitor commands.
+ * Used by devices, init, the direct backend, and monitor commands.
  */
 
 import type { DiscoveredModem } from 'cellary'

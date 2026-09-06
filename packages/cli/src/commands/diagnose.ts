@@ -2,9 +2,9 @@ import { isAtAdapter } from 'cellary'
 import { defineCommand } from 'citty'
 import { withDevice } from '../backend/resolve.js'
 import { CF_REASON, MS_CLASS, PHONE_ACTIVITY } from '../lib/3gpp-tables.js'
+import { portArgs } from '../lib/cli-args.js'
 import { withErrorHandling } from '../lib/errors.js'
 import { formatLabels } from '../lib/format.js'
-import { portArgs } from '../lib/resolve-modem.js'
 import { formatSignalDetails, formatSignalMainLine } from '../lib/signal-format.js'
 
 // +CLIP: <n>[,<m>]  -- second group optional (network provision status)

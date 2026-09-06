@@ -2,11 +2,11 @@ import { type DiscoveredModem, type IdentifiedDevice, identifyAll } from 'cellar
 import { defineCommand } from 'citty'
 
 import { withBackend } from '../backend/resolve.js'
+import { verboseArg } from '../lib/cli-args.js'
 import { busLocation, formatVidPid } from '../lib/device-format.js'
 import { withErrorHandling } from '../lib/errors.js'
 import { formatTable } from '../lib/format.js'
 import { findModemInterface } from '../lib/network-interface.js'
-import { verboseArg } from '../lib/resolve-modem.js'
 
 // ── Types ───────────────────────────────────────────────────────────────────
 

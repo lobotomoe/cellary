@@ -1,9 +1,9 @@
 import { defineCommand } from 'citty'
 
 import { withDevice } from '../../backend/resolve.js'
+import { portArgs } from '../../lib/cli-args.js'
 import { withErrorHandling } from '../../lib/errors.js'
 import { formatTable } from '../../lib/format.js'
-import { portArgs } from '../../lib/resolve-modem.js'
 
 function boolMark(value: boolean): string {
   return value ? 'yes' : ''

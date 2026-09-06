@@ -2,9 +2,9 @@ import type { ModemCapabilities, SmsCount } from 'cellary'
 import { defineCommand } from 'citty'
 
 import { withDevice } from '../backend/resolve.js'
+import { portArgs } from '../lib/cli-args.js'
 import { withErrorHandling } from '../lib/errors.js'
 import { findModemInterface } from '../lib/network-interface.js'
-import { portArgs } from '../lib/resolve-modem.js'
 import { formatSignalDetails, formatSignalMainLine } from '../lib/signal-format.js'
 
 // Fixed label width for streaming output (longest label: "Interface" = 9 chars + 2 padding)

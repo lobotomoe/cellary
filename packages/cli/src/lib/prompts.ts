@@ -1,8 +1,5 @@
 /**
- * Interactive CLI prompts for modem selection and confirmations.
- *
- * Extracted from resolve-modem.ts so both DirectBackend and
- * resolveModemWithPrepare() can share them.
+ * Interactive CLI prompts for modem selection.
  */
 
 import { createInterface } from 'node:readline'
@@ -21,22 +18,6 @@ export async function promptModemSelection(
   }
 
   return promptSelection(modems)
-}
-
-export function confirmOrAbort(question: string): Promise<void> {
-  const rl = createInterface({ input: process.stdin, output: process.stdout })
-
-  return new Promise((resolve, reject) => {
-    rl.question(`${question} [y/N] `, (answer) => {
-      rl.close()
-      const yes = answer.trim().toLowerCase() === 'y'
-      if (yes) {
-        resolve()
-      } else {
-        reject(new Error('Aborted.'))
-      }
-    })
-  })
 }
 
 function formatModem(m: DiscoveredModem): string {

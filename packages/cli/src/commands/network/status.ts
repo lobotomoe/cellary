@@ -2,8 +2,8 @@ import type { RegistrationInfo } from 'cellary'
 import { defineCommand } from 'citty'
 
 import { withDevice } from '../../backend/resolve.js'
+import { portArgs } from '../../lib/cli-args.js'
 import { withErrorHandling } from '../../lib/errors.js'
-import { portArgs } from '../../lib/resolve-modem.js'
 
 const STATUS_LABELS: Record<string, string> = {
   notRegistered: 'not registered',

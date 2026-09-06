@@ -3,9 +3,9 @@ import type { DiscoveredModem } from 'cellary'
 import { defineCommand } from 'citty'
 
 import { withBackend } from '../backend/resolve.js'
+import { verboseArg } from '../lib/cli-args.js'
 import { busLocation, deviceDisplayName, formatVidPid } from '../lib/device-format.js'
 import { withErrorHandling } from '../lib/errors.js'
-import { verboseArg } from '../lib/resolve-modem.js'
 
 export default defineCommand({
   meta: {

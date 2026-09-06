@@ -1,8 +1,8 @@
 import { defineCommand } from 'citty'
 
 import { withDevice } from '../backend/resolve.js'
+import { portArgs } from '../lib/cli-args.js'
 import { withErrorHandling } from '../lib/errors.js'
-import { portArgs } from '../lib/resolve-modem.js'
 
 export default defineCommand({
   meta: {
