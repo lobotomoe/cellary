@@ -193,10 +193,10 @@ import { Modem, huaweiPlugin, DEFAULT_VENDORS } from 'cellary'
 // Default: all built-in vendors included automatically
 const modem = await Modem.detect()
 
-// Or register custom vendors
-const modem = await Modem.detect(undefined, {
-  vendors: [...DEFAULT_VENDORS, myPlugin],
-})
+// Or register custom vendors (a Map keyed by VendorPlugin.vendorId)
+const vendors = new Map(DEFAULT_VENDORS)
+vendors.set(myPlugin.vendorId, myPlugin)
+const modem = await Modem.detect(undefined, { vendors })
 ```
 
 A plugin implements `VendorPlugin` and provides: protocol adapter discovery (e.g. HiLink HTTP alongside AT), vendor-specific URC decoding, call progress URC prefixes, device state resolution, and diagnostic probes.
@@ -208,6 +208,7 @@ Built-in vendors:
 | Huawei | `huaweiPlugin` | AT + HiLink HTTP + ADB | E3372, E8372 |
 | ZTE | `ztePlugin` | AT | MF656 |
 | MSM8916 OEM | `msm8916OemPlugin` | AT + MiFi HTTP + ADB | UZ801, TianJie, UFI boards |
+| Alcatel | `alcatelPlugin` | JRD HTTP over CDC-ECM | LINKZONE MW45V |
 
 ## CLI
 
@@ -264,17 +265,18 @@ cellary daemon status         # check status (no sudo needed)
 | **device** | `info()`, `imei()` | working |
 | **capabilities** | `discover()` | working |
 | **stk** | proactive SIM commands (menus, input, display) | device-dependent |
-| **traffic** | `session()`, `month()` | working (HiLink) |
+| **traffic** | `session()`, `monthly()` | working (HiLink) |
 
 ### Events
 
 ```ts
 modem.on('sms:received', ({ storage, index }) => { })
-modem.on('call:ring', ({ number, direction, state }) => { })
-modem.on('call:ended', (info) => { })
+modem.on('call:state', (call) => { })            // one event for the whole call lifecycle
+modem.on('call:supplementary', (event) => { })   // forwarding active, call barred, ...
 modem.on('network:registration', (info) => { })
-modem.on('network:signal', (info) => { })
-modem.on('urc', ({ prefix, body, raw }) => { })  // catch-all for unhandled URCs
+modem.on('sim:state', ({ state }) => { })
+modem.on('indicator:change', (event) => { })     // battery, signal level, service
+modem.on('debug:raw', ({ prefix, body, raw }) => { })  // raw protocol messages, for tooling
 modem.on('error', (err) => { })
 modem.on('disconnect', () => { })
 modem.on('reconnect', () => { })
@@ -297,10 +299,17 @@ console.log(caps.stk.supported)   // true/false
 
 ### Raw AT commands
 
+Raw access goes through the AT adapter, not the protocol-agnostic `Modem`:
+
 ```ts
-const result = await modem.execute('AT+COPS?')
-console.log(result.lines)   // ['+COPS: 0,0,"T-Mobile",7']
-console.log(result.status)  // { type: 'ok' }
+import { isAtAdapter } from 'cellary'
+
+const at = modem.adapter('at')
+if (isAtAdapter(at)) {
+  const result = await at.execute('AT+COPS?')
+  console.log(result.lines)   // ['+COPS: 0,0,"T-Mobile",7']
+  console.log(result.status)  // { type: 'ok' }
+}
 ```
 
 ### Custom transport
@@ -320,9 +329,11 @@ cellary ships with a generic 3GPP profile that works with any standard modem. Ve
 const modem = await Modem.open('/dev/ttyUSB0', {
   profile: {
     name: 'Custom',
-    initCommands: ['ATE0', 'AT+CMEE=1'],
-    urcPrefixes: ['+CMTI', 'RING', '+CREG'],
-    commandTimeouts: { 'AT+CMGS': 60_000 },
+    at: {
+      initCommands: ['ATE1', 'AT+CMEE=1'],
+      urcPrefixes: ['+CMTI', 'RING', '+CREG'],
+      commandTimeouts: { 'AT+CMGS': 60_000 },
+    },
   },
 })
 ```
@@ -335,7 +346,7 @@ const modem = await Modem.open('/dev/ttyUSB0', {
 import { ModemPool } from 'cellary'
 
 const pool = new ModemPool()
-pool.start()
+await pool.start()
 
 // Wait for the first modem to become ready
 const modem = await pool.waitForReady()
@@ -413,7 +424,7 @@ Monorepo with three packages:
 
 ## Status
 
-The core engine is solid and comprehensively tested (826 tests). USB plug-and-play discovery, mode-switching, and serial port detection all work. The CLI covers the main use cases with an interactive monitor TUI. Three vendor plugins: Huawei (AT + HiLink HTTP + ADB), ZTE (AT), and MSM8916 OEM (AT + MiFi HTTP + ADB). Fleet management with automatic provisioning is available. The daemon runs as a system service (launchd/systemd), providing unprivileged access via IPC. Backend abstraction lets CLI commands work transparently through the daemon or direct USB.
+The core engine is solid and comprehensively tested. USB plug-and-play discovery, mode-switching, and serial port detection all work. The CLI covers the main use cases with an interactive monitor TUI. Four vendor plugins: Huawei (AT + HiLink HTTP + ADB), ZTE (AT), MSM8916 OEM (AT + MiFi HTTP + ADB), and Alcatel (JRD HTTP over CDC-ECM). Fleet management with automatic provisioning is available. The daemon runs as a system service (launchd/systemd), providing unprivileged access via IPC. Backend abstraction lets CLI commands work transparently through the daemon or direct USB.
 
 Active development — breaking changes may occur before 1.0.
 
