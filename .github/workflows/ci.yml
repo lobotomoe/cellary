@@ -24,8 +24,12 @@ jobs:
       - run: sudo apt-get update && sudo apt-get install -y libudev-dev
 
       - run: pnpm install --frozen-lockfile
+
+      # Build first: the daemon and CLI resolve `cellary` (and the CLI resolves
+      # `@cellary/daemon`) through package exports that point at dist/, so
+      # typecheck and tests need the workspace dependencies built.
+      - run: pnpm build
       - run: pnpm typecheck
       - run: pnpm lint
       - run: pnpm test
-      - run: pnpm build
       - run: pnpm audit --audit-level high
