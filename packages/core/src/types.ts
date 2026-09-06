@@ -176,35 +176,6 @@ export interface UnsolicitedMessage {
 // Domain types now live next to their service interfaces.
 // Re-exported here for backward compatibility — all existing imports keep working.
 
-// SMS (SmsNotification imported above for ModemEventMap)
-export type { SmsCount, SmsMessage } from './protocols/services/sms.js'
-export type { SmsNotification }
-
-// Network (RegistrationInfo imported above for ModemEventMap)
-export type {
-  AvailableNetwork,
-  OperatorNameEntry,
-  PreferredOperator,
-  RegistrationStatus,
-  SignalInfo,
-} from './protocols/services/network.js'
-export type { RegistrationInfo }
-
-// Voice / Call (CallEvent, SsNotificationEvent imported above for ModemEventMap)
-export type {
-  CallEndReason,
-  CallForwardingRule,
-  CallForwardMode,
-  CallForwardReason,
-  CallState,
-  ClirSetting,
-  ClirStatus,
-  MoSsNotification,
-  MtSsNotification,
-  NumberFormat,
-} from './protocols/services/voice.js'
-export type { CallEvent, SsNotificationEvent }
-
 // Data Connection
 export type {
   DataConnectionState,
@@ -224,14 +195,21 @@ export type {
   IndicatorDescriptor,
   IndicatorReport,
 } from './protocols/services/device.js'
+
+// Network (RegistrationInfo imported above for ModemEventMap)
+export type {
+  AvailableNetwork,
+  OperatorNameEntry,
+  PreferredOperator,
+  RegistrationStatus,
+  SignalInfo,
+} from './protocols/services/network.js'
 // Phonebook
 export type {
   PhonebookEntry,
   PhonebookStorage,
   PhonebookStorageInfo,
 } from './protocols/services/phonebook.js'
-export type { IndicatorChangeEvent }
-
 // Radio
 export type {
   EDrxAccessType,
@@ -247,8 +225,30 @@ export type {
 } from './protocols/services/radio.js'
 // SIM
 export type { PinRetryInfo, SimInfo } from './protocols/services/sim.js'
+// SMS (SmsNotification imported above for ModemEventMap)
+export type { SmsCount, SmsMessage } from './protocols/services/sms.js'
 // Traffic
 export type { TrafficStats } from './protocols/services/traffic.js'
+// Voice / Call (CallEvent, SsNotificationEvent imported above for ModemEventMap)
+export type {
+  CallEndReason,
+  CallForwardingRule,
+  CallForwardMode,
+  CallForwardReason,
+  CallState,
+  ClirSetting,
+  ClirStatus,
+  MoSsNotification,
+  MtSsNotification,
+  NumberFormat,
+} from './protocols/services/voice.js'
+export type {
+  CallEvent,
+  IndicatorChangeEvent,
+  RegistrationInfo,
+  SmsNotification,
+  SsNotificationEvent,
+}
 
 // ─── SIM State ──────────────────────────────────────────────────────────────
 

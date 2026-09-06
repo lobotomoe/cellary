@@ -28,16 +28,16 @@
     "typecheck": "tsc --noEmit -p tsconfig.typecheck.json"
   },
   "dependencies": {
-    "fast-xml-parser": "^5.4.2",
+    "fast-xml-parser": "^5.11.1",
     "serialport": "^12.0.0",
-    "tcpip": "^0.3.3",
-    "usb": "^2.17.0",
-    "zod": "^4.3.6"
+    "tcpip": "^0.3.6",
+    "usb": "^2.18.0",
+    "zod": "^4.5.4"
   },
   "devDependencies": {
-    "@types/node": "^25.3.3",
-    "tsup": "^8.0.0",
-    "vitest": "^3.0.0"
+    "@types/node": "^25.9.5",
+    "tsup": "^8.5.1",
+    "vitest": "^3.2.7"
   },
   "keywords": [
     "modem",

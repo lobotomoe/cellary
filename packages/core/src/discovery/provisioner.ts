@@ -342,7 +342,7 @@ async function resolveHttpToAt(
 
 function resolveUsbProductTransport(entry: UsbModemEntry, productId: number): ProvisionResult {
   const productConfig = findProductConfig(entry, productId)
-  if (!productConfig || productConfig.transport.type !== 'usb') {
+  if (productConfig?.transport.type !== 'usb') {
     throw new DiscoveryError(
       `Unknown modem product ID 0x${productId.toString(16)}. ` +
         'The device switched to an unrecognized mode.',

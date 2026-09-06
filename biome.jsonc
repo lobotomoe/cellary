@@ -12,7 +12,7 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "recommended": true,
+      "preset": "recommended",
       "correctness": {
         "noUnusedVariables": "error",
         "noUnusedImports": "error",
@@ -21,11 +21,7 @@
       "nursery": {
         "noFloatingPromises": "error",
         "noMisusedPromises": "error",
-        "noNestedPromises": "error",
-        "noShadow": "error",
-        "noUnnecessaryConditions": "error",
         "useAwaitThenable": "error",
-        "useErrorCause": "error",
         "useExhaustiveSwitchCases": "error"
       },
       "performance": {
@@ -39,7 +35,8 @@
         "useExplicitLengthCheck": "error",
         "useForOf": "error",
         "useThrowNewError": "error",
-        "useThrowOnlyError": "error"
+        "useThrowOnlyError": "error",
+        "useErrorCause": "error"
       },
       "suspicious": {
         "noExplicitAny": "error",
@@ -51,7 +48,16 @@
           "options": {
             "ignoreTypes": false
           }
-        }
+        },
+        "noNestedPromises": "error",
+        "noShadow": "error",
+        // Off because Biome 2.5's type inference for this rule is unsound
+        // against this codebase: it reports `RegExp.exec()` results as never
+        // null, ignores `noUncheckedIndexedAccess` on record lookups, and reads
+        // a mutable class field initialised to `false` as the literal `false`.
+        // Every one of its 53 findings on 2.5.12 was a false positive.
+        // Re-enable once a Biome release fixes the inference.
+        "noUnnecessaryConditions": "off"
       }
     }
   },
