@@ -2,10 +2,13 @@
  * Direct backend: wraps a core Modem for local USB/serial access.
  *
  * DirectDeviceHandle delegates all service calls directly to the Modem.
- * DirectBackend contains the modem resolution logic previously in resolve-modem.ts.
+ * DirectBackend resolves which modem to open (explicit --port, the only
+ * operable device, or an interactive choice) and records every exchange with
+ * it to the durable device-comms audit, exactly as the daemon does.
  */
 
 import type {
+  AuditSink,
   AvailableNetwork,
   Capabilities,
   ConnectionProgress,
@@ -31,9 +34,9 @@ import type {
   VendorPlugin,
   Voice,
 } from 'cellary'
-// eslint-disable-next-line @typescript-eslint/no-duplicate-imports -- type vs value imports
 import { DEFAULT_RESOLVERS, DeviceObserver, discover, Modem, provision } from 'cellary'
 
+import { type DeviceAudit, openDeviceAudit } from '../lib/audit.js'
 import { busLocation, deviceDisplayName, formatVidPid } from '../lib/device-format.js'
 import { createLogger } from '../lib/logger.js'
 import { promptModemSelection } from '../lib/prompts.js'
@@ -56,11 +59,13 @@ class DirectRawAccess implements RawAccess {
 
 class DirectDeviceHandle implements DeviceHandle {
   private readonly _modem: Modem
+  private readonly _audit: DeviceAudit
   readonly rawAccess: RawAccess
   readonly plugin: VendorPlugin | undefined
 
-  constructor(modem: Modem) {
+  constructor(modem: Modem, audit: DeviceAudit) {
     this._modem = modem
+    this._audit = audit
     this.rawAccess = new DirectRawAccess(modem)
     this.plugin = modem.plugin
   }
@@ -152,7 +157,12 @@ class DirectDeviceHandle implements DeviceHandle {
   // ── Lifecycle ────────────────────────────────────────────────────────────
 
   async close(): Promise<void> {
-    return this._modem.close()
+    try {
+      await this._modem.close()
+    } finally {
+      // The audit outlives the modem by design: the close exchange is recorded.
+      this._audit.close()
+    }
   }
 
   get isOpen(): boolean {
@@ -164,11 +174,6 @@ class DirectDeviceHandle implements DeviceHandle {
   get preparation(): PrepReport | undefined {
     return this._modem.preparation
   }
-}
-
-/** Wrap an existing Modem as a DeviceHandle. Used by commands that manage their own Modem lifecycle. */
-export function wrapModem(modem: Modem): DeviceHandle {
-  return new DirectDeviceHandle(modem)
 }
 
 // ── DirectBackend ──────────────────────────────────────────────────────────
@@ -213,8 +218,9 @@ export class DirectBackend implements Backend {
     const target = options?.target
 
     if (target !== undefined) {
-      const modem = await Modem.open({ path: target, logger, onProgress, autoInit })
-      return new DirectDeviceHandle(modem)
+      return openHandle(target, logger, (auditSink) =>
+        Modem.open({ path: target, logger, onProgress, autoInit, auditSink }),
+      )
     }
 
     const allModems = await discover()
@@ -235,13 +241,11 @@ export class DirectBackend implements Backend {
     if (operable.length === 1) {
       const only = operable[0]
       if (only === undefined) throw new Error('Unexpected empty modems array')
-      const modem = await openModem(only, logger, autoInit)
-      return new DirectDeviceHandle(modem)
+      return openDiscovered(only, logger, autoInit)
     }
 
     const selected = await promptModemSelection(operable)
-    const modem = await openModem(selected, logger, autoInit)
-    return new DirectDeviceHandle(modem)
+    return openDiscovered(selected, logger, autoInit)
   }
 
   async dispose(): Promise<void> {
@@ -251,15 +255,38 @@ export class DirectBackend implements Backend {
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
-async function openModem(
+/**
+ * Open the audit for a device, then the modem through it, so the very first
+ * init command is already recorded. If opening the modem fails, the audit is
+ * closed again -- the handle that would have owned it never exists.
+ */
+async function openHandle(
+  deviceId: string,
+  logger: Logger,
+  open: (auditSink: AuditSink) => Promise<Modem>,
+): Promise<DeviceHandle> {
+  const audit = openDeviceAudit(deviceId, logger)
+  let modem: Modem
+  try {
+    modem = await open(audit.sink)
+  } catch (err) {
+    audit.close()
+    throw err
+  }
+  return new DirectDeviceHandle(modem, audit)
+}
+
+function openDiscovered(
   modem: DiscoveredModem,
   logger: Logger,
   autoInit?: boolean | undefined,
-): Promise<Modem> {
-  if (modem.mode === 'serial') {
-    return Modem.open({ path: modem.path, logger, onProgress, autoInit })
-  }
-  return Modem.detect(modem, { logger, onProgress, autoInit })
+): Promise<DeviceHandle> {
+  return openHandle(modem.deviceId, logger, (auditSink) => {
+    if (modem.mode === 'serial') {
+      return Modem.open({ path: modem.path, logger, onProgress, autoInit, auditSink })
+    }
+    return Modem.detect(modem, { logger, onProgress, autoInit, auditSink })
+  })
 }
 
 function formatModem(m: DiscoveredModem): string {

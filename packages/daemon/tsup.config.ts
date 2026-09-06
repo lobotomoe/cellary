@@ -31,4 +31,13 @@ export default defineConfig([
     target: 'node20',
     outDir: 'dist/ipc',
   },
+  {
+    entry: ['src/audit.ts'],
+    format: ['esm'],
+    splitting: false,
+    sourcemap: true,
+    dts: true,
+    target: 'node20',
+    outDir: 'dist',
+  },
 ])

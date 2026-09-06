@@ -5,9 +5,9 @@
  * Socket path is validated in getSocketPath() (shared with client).
  */
 
-import { homedir } from 'node:os'
-import { join } from 'node:path'
 import { z } from 'zod'
+
+import { resolveAuditFile } from './audit-config.js'
 
 const LOG_LEVELS = ['trace', 'debug', 'info', 'warn', 'error', 'fatal'] as const
 
@@ -51,9 +51,6 @@ if (!parsed.success) {
   process.exit(1)
 }
 
-const stateHome = parsed.data.XDG_STATE_HOME ?? join(homedir(), '.local', 'state')
-const auditDir = parsed.data.CELLARY_AUDIT_DIR ?? join(stateHome, 'cellary', 'audit')
-
 const DAY_MS = 24 * 60 * 60 * 1000
 const DEFAULT_AUDIT_MAX_BYTES = 64 * 1024 * 1024
 const DEFAULT_AUDIT_RETENTION_DAYS = 365
@@ -67,7 +64,7 @@ export const config = {
   /** Whether arbitrary shell access (system.shell / shell stream) is permitted. */
   allowShell,
   /** File the device-comms audit is appended to. */
-  auditFile: join(auditDir, 'comms.jsonl'),
+  auditFile: resolveAuditFile(parsed.data),
   /** Size at which the audit file rotates. */
   auditMaxBytes: parsed.data.CELLARY_AUDIT_MAX_BYTES ?? DEFAULT_AUDIT_MAX_BYTES,
   /** How long rotated audit files are retained before pruning. */
