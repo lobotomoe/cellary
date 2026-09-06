@@ -268,3 +268,22 @@ export const provisionResultPartialSchema = z.object({
     })
     .optional(),
 })
+
+// ── STK ─────────────────────────────────────────────────────────────────────
+
+const stkMenuItemSchema = z.object({
+  id: z.number(),
+  label: z.string(),
+})
+
+const stkMenuSchema = z.object({
+  type: z.literal('menu'),
+  title: z.string(),
+  items: z.array(stkMenuItemSchema),
+})
+
+/** Result of the `stk.state` RPC: whether STK is enabled and the current root menu, if any. */
+export const stkStateSchema = z.object({
+  enabled: z.boolean(),
+  menu: stkMenuSchema.optional(),
+})

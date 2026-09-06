@@ -52,9 +52,15 @@ interface SmsMenuProps {
   readonly onNavigate: (view: ViewId) => void
 }
 
-const SMS_MENU_ITEMS = [
-  { id: 'inbox', label: 'Inbox', view: 'sms-inbox' as ViewId },
-  { id: 'compose', label: 'Send SMS', view: 'sms-compose' as ViewId },
+interface SmsMenuItem {
+  readonly id: string
+  readonly label: string
+  readonly view: ViewId
+}
+
+const SMS_MENU_ITEMS: readonly SmsMenuItem[] = [
+  { id: 'inbox', label: 'Inbox', view: 'sms-inbox' },
+  { id: 'compose', label: 'Send SMS', view: 'sms-compose' },
 ]
 
 export function SmsMenu({ active, onNavigate }: SmsMenuProps): React.JSX.Element {

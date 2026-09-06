@@ -46,6 +46,7 @@ import {
   simInfoSchema,
   smsCountSchema,
   smsMessageSchema,
+  stkStateSchema,
   thermalReadingSchema,
   trafficStatsSchema,
 } from './response-schemas.js'
@@ -318,9 +319,8 @@ class RemoteDeviceHandle implements DeviceHandle {
     }) satisfies Stk
 
     // Fetch initial state from daemon
-    call('stk.state')
-      .then((result) => {
-        const state = result as { enabled: boolean; menu?: StkMenu }
+    validated(call('stk.state'), stkStateSchema)
+      .then((state) => {
         stkEnabled = state.enabled
         stkMenu = state.menu
       })
