@@ -15,7 +15,6 @@ import type {
   PoolOptions,
   ProvisionResult,
 } from 'cellary'
-// eslint-disable-next-line @typescript-eslint/no-duplicate-imports -- type vs value imports
 import { ModemPool, noopLogger, provision } from 'cellary'
 
 import type { IpcDeviceInfo, IpcDiscoveryInfo, IpcReadinessStage } from './ipc/protocol.js'

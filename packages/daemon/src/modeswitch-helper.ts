@@ -128,7 +128,6 @@ function isDeviceGone(err: unknown): boolean {
 
 try {
   // Dynamic require: path passed as arg, avoids bundling issues
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
   const { findByIds, usb, OutEndpoint, InEndpoint } = require(usbModulePath)
 
   const device = findByIds(vid, pid)
