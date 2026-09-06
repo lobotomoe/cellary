@@ -29,6 +29,7 @@ const main = defineCommand({
     devices: () => import('./commands/devices.js').then((m) => m.default),
     info: () => import('./commands/info.js').then((m) => m.default),
     signal: () => import('./commands/signal.js').then((m) => m.default),
+    capabilities: () => import('./commands/capabilities.js').then((m) => m.default),
     network: () => import('./commands/network/index.js').then((m) => m.default),
     sms: () => import('./commands/sms/index.js').then((m) => m.default),
     ussd: () => import('./commands/ussd.js').then((m) => m.default),
