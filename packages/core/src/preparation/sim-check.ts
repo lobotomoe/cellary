@@ -7,18 +7,16 @@
  */
 
 import type { Logger } from '../logger.js'
-import type { HealthCheck, StepOutcome } from './types.js'
+import type { HealthCheck, PreparationTarget, StepOutcome } from './types.js'
 
 export const simCheck: HealthCheck = {
   id: 'sim',
   name: 'SIM card',
   kind: 'diagnostic',
 
-  async execute(modem: unknown, log: Logger): Promise<StepOutcome> {
-    const m = modem as { sim: { info(): Promise<{ state: string; iccid: string | undefined }> } }
-
+  async execute(modem: PreparationTarget, log: Logger): Promise<StepOutcome> {
     try {
-      const sim = await m.sim.info()
+      const sim = await modem.sim.info()
 
       switch (sim.state) {
         case 'ready': {
@@ -65,12 +63,6 @@ export const simCheck: HealthCheck = {
           return {
             status: 'degraded',
             detail: 'SIM status unknown (all providers failed)',
-          }
-
-        default:
-          return {
-            status: 'degraded',
-            detail: `SIM state: ${sim.state}`,
           }
       }
     } catch (err: unknown) {

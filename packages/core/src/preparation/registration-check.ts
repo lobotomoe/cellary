@@ -6,22 +6,16 @@
  */
 
 import type { Logger } from '../logger.js'
-import type { HealthCheck, StepOutcome } from './types.js'
+import type { HealthCheck, PreparationTarget, StepOutcome } from './types.js'
 
 export const registrationCheck: HealthCheck = {
   id: 'registration',
   name: 'Network registration',
   kind: 'diagnostic',
 
-  async execute(modem: unknown, log: Logger): Promise<StepOutcome> {
-    const m = modem as {
-      network: {
-        registration(): Promise<{ status: string; technology?: string }>
-      }
-    }
-
+  async execute(modem: PreparationTarget, log: Logger): Promise<StepOutcome> {
     try {
-      const reg = await m.network.registration()
+      const reg = await modem.network.registration()
 
       switch (reg.status) {
         case 'home':
@@ -55,10 +49,10 @@ export const registrationCheck: HealthCheck = {
             recoverable: true,
           }
 
-        default:
+        case 'unknown':
           return {
             status: 'degraded',
-            detail: `Registration status: ${reg.status}`,
+            detail: 'Registration status unknown',
           }
       }
     } catch (err: unknown) {

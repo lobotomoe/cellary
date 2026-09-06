@@ -13,6 +13,7 @@
 
 import type { Logger } from '../logger.js'
 import type {
+  PreparationTarget,
   Recoverability,
   Remediation,
   RemediationContext,
@@ -84,7 +85,7 @@ async function runOne(
  * changed, and applying them concurrently to one device is unsafe.
  */
 export async function applyRemediations(
-  modem: unknown,
+  modem: PreparationTarget,
   remediations: readonly Remediation[],
   log: Logger,
   policy: RemediationPolicy = DEFAULT_REMEDIATION_POLICY,

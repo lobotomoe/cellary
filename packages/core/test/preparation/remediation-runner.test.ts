@@ -6,6 +6,10 @@ import {
   DEFAULT_REMEDIATION_POLICY,
 } from '../../src/preparation/remediation-runner.js'
 import type { Recoverability, Remediation } from '../../src/preparation/types.js'
+import { routeServices } from '../../src/service-router.js'
+
+/** A modem with every service routed to its NotSupported fallback. */
+const target = routeServices([], [], noopLogger)
 
 interface FakeSpec {
   recoverability?: Recoverability
@@ -38,7 +42,7 @@ function fakeRemediation(spec: FakeSpec = {}): {
 }
 
 function run(remediation: Remediation) {
-  return applyRemediations({}, [remediation], noopLogger)
+  return applyRemediations(target, [remediation], noopLogger)
 }
 
 describe('applyRemediations', () => {
@@ -138,7 +142,7 @@ describe('applyRemediations', () => {
       verify: () => Promise.resolve(true),
     })
 
-    await applyRemediations({}, [make('a'), make('b'), make('c')], noopLogger)
+    await applyRemediations(target, [make('a'), make('b'), make('c')], noopLogger)
 
     expect(order).toEqual(['a', 'b', 'c'])
   })

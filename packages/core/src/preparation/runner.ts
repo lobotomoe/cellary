@@ -11,6 +11,7 @@ import { applyRemediations, type RemediationPolicy } from './remediation-runner.
 import type {
   HealthCheck,
   Limitation,
+  PreparationTarget,
   PrepProfile,
   PrepReport,
   RemediationRecord,
@@ -31,7 +32,7 @@ interface DeviceInfo {
  * Kept as the diagnostic-only entry point.
  */
 export async function runHealthChecks(
-  modem: unknown,
+  modem: PreparationTarget,
   profile: PrepProfile,
   device: DeviceInfo,
   log: Logger,
@@ -49,7 +50,7 @@ export async function runHealthChecks(
  * software-reversible fixes (see remediation-runner).
  */
 export async function runPreparation(
-  modem: unknown,
+  modem: PreparationTarget,
   profile: PrepProfile,
   device: DeviceInfo,
   log: Logger,
@@ -62,7 +63,7 @@ export async function runPreparation(
 }
 
 async function runChecks(
-  modem: unknown,
+  modem: PreparationTarget,
   checks: readonly HealthCheck[],
   log: Logger,
 ): Promise<StepRecord[]> {
@@ -162,7 +163,7 @@ function collectRecommendations(
 
     if (outcome.status === 'failed') {
       if (outcome.error.includes('PIN required')) {
-        recommendations.push('Enter SIM PIN using modem.sim.enterPin() or `cellary pin <code>`')
+        recommendations.push('Enter SIM PIN using modem.sim.enterPin() or `cellary sim pin <code>`')
       } else if (outcome.error.includes('PUK required')) {
         recommendations.push('SIM is PUK-locked. Contact your carrier to obtain the PUK code')
       } else if (outcome.error.includes('Not registered')) {

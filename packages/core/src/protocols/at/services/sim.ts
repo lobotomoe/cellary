@@ -1,7 +1,7 @@
 import { ATError, ParseError } from '../../../errors.js'
 import type { ModelInfo, PinRetryInfo, SimInfo } from '../../../types.js'
 import type { Sim } from '../../adapter.js'
-import { normalizeIccid } from '../../services/sim.js'
+import { normalizeIccid } from '../../iccid.js'
 import type { ATChannel } from '../channel/at-channel.js'
 import type { AtConfig } from '../types.js'
 

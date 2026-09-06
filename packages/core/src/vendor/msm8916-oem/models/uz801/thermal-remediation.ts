@@ -13,32 +13,10 @@
  */
 
 import type { Remediation, RemediationContext } from '../../../../preparation/types.js'
-import type { Thermal } from '../../../../protocols/services/thermal.js'
 import { UZ801_THERMAL } from './constants.js'
 
 /** Target cap: the frequency the model declares as thermally stable. */
 const TARGET_KHZ = UZ801_THERMAL.stableFrequencyKhz
-
-interface ThermalCapable {
-  readonly thermal: Thermal
-}
-
-/**
- * Narrow the remediation context's `unknown` modem to something with a thermal
- * service. `modem.thermal` is always present on a real Modem (routed service
- * with a NotSupported fallback), so the presence check is sound — and it avoids
- * both an `as` cast and a circular import of the Modem type.
- */
-function isThermalCapable(modem: unknown): modem is ThermalCapable {
-  return typeof modem === 'object' && modem !== null && 'thermal' in modem
-}
-
-function thermalOf(ctx: RemediationContext): Thermal {
-  if (!isThermalCapable(ctx.modem)) {
-    throw new Error('Thermal remediation requires a modem with a thermal service')
-  }
-  return ctx.modem.thermal
-}
 
 export const uz801ThermalCap: Remediation = {
   id: 'thermal-cap',
@@ -47,7 +25,7 @@ export const uz801ThermalCap: Remediation = {
   recoverability: 'software-reversible',
 
   async isNeeded(ctx: RemediationContext): Promise<boolean> {
-    const { maxKhz } = await thermalOf(ctx).readCpuFrequency()
+    const { maxKhz } = await ctx.modem.thermal.readCpuFrequency()
     // Needed whenever the CPU runs above the stable cap (e.g. fresh boot, where
     // mpdecision has restored the stock 1190 MHz maximum).
     return maxKhz > TARGET_KHZ
@@ -55,11 +33,11 @@ export const uz801ThermalCap: Remediation = {
 
   async apply(ctx: RemediationContext): Promise<void> {
     // setMaxFrequencyKhz stops the governor daemon and verifies the write.
-    await thermalOf(ctx).setMaxFrequencyKhz(TARGET_KHZ)
+    await ctx.modem.thermal.setMaxFrequencyKhz(TARGET_KHZ)
   },
 
   async verify(ctx: RemediationContext): Promise<boolean> {
-    const { maxKhz } = await thermalOf(ctx).readCpuFrequency()
+    const { maxKhz } = await ctx.modem.thermal.readCpuFrequency()
     return maxKhz <= TARGET_KHZ
   },
 }

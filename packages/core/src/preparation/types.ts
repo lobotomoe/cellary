@@ -9,6 +9,48 @@
  */
 
 import type { Logger } from '../logger.js'
+import type {
+  Capabilities,
+  Data,
+  Device,
+  Network,
+  Phonebook,
+  Radio,
+  Sim,
+  Sms,
+  Stk,
+  System,
+  Thermal,
+  Traffic,
+  Ussd,
+  Voice,
+} from '../protocols/services/index.js'
+
+// ── Preparation target ──────────────────────────────────────────────────────
+
+/**
+ * The live modem as health checks and remediations see it: every routed
+ * service, ready to call.
+ *
+ * Declared structurally rather than as `Modem` because modem.ts imports this
+ * module (a direct import would be a cycle). A Modem satisfies it as-is.
+ */
+export interface PreparationTarget {
+  readonly sms: Sms
+  readonly voice: Voice
+  readonly network: Network
+  readonly sim: Sim
+  readonly ussd: Ussd
+  readonly device: Device
+  readonly traffic: Traffic
+  readonly data: Data
+  readonly radio: Radio
+  readonly capabilities: Capabilities
+  readonly stk: Stk
+  readonly phonebook: Phonebook
+  readonly system: System
+  readonly thermal: Thermal
+}
 
 // ── Step outcome ────────────────────────────────────────────────────────────
 
@@ -62,15 +104,8 @@ export interface HealthCheck {
   readonly name: string
   /** Semantic kind: diagnostic (read-only), action (mutating), or verification (post-action) */
   readonly kind: StepKind
-  /**
-   * Execute the check against a live modem.
-   *
-   * The modem parameter is typed as `unknown` to avoid a circular dependency
-   * between preparation/types.ts and modem.ts. Implementations cast it to
-   * the Modem type they need. This is the one place where the tradeoff of
-   * a loose type is worth the decoupling benefit.
-   */
-  execute(modem: unknown, log: Logger): Promise<StepOutcome>
+  /** Execute the check against a live modem. */
+  execute(modem: PreparationTarget, log: Logger): Promise<StepOutcome>
 }
 
 // ── Limitation ──────────────────────────────────────────────────────────────
@@ -116,12 +151,7 @@ export type Recoverability =
 
 /** Context handed to every remediation step. */
 export interface RemediationContext {
-  /**
-   * The live modem. Typed `unknown` to avoid a circular dependency between
-   * preparation/types.ts and modem.ts — the same tradeoff as HealthCheck.execute.
-   * Implementations narrow it to the Modem shape they need.
-   */
-  readonly modem: unknown
+  readonly modem: PreparationTarget
   readonly log: Logger
 }
 
