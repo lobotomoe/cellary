@@ -18,6 +18,7 @@ import type { Device, Interface } from 'usb'
 import { findByIds, InEndpoint, OutEndpoint, usb } from 'usb'
 
 import { TransportError } from '../../errors.js'
+import { deriveLocalMac, parseIpv4Cidr } from '../net-address.js'
 import { RndisBridge } from './bridge.js'
 
 export type { TcpConnection } from 'tcpip'
@@ -71,13 +72,21 @@ export class RndisTransport {
   private _stack: Awaited<ReturnType<typeof createStack>> | null = null
   private _tapWriter: WritableStreamDefaultWriter<Uint8Array> | null = null
   private _readerCancelled = false
+  /**
+   * Set when the stack-to-device pipe died while the transport was still open
+   * (e.g. a bulk write failed after the device dropped off the bus). The tunnel
+   * is half-dead from then on: frames still arrive but nothing can be sent, so
+   * every later request would hang until its read timeout. Recording the
+   * failure lets connectTcp() fail immediately with the real cause instead.
+   */
+  private _pipeFailure: TransportError | null = null
 
   constructor(options: RndisTransportOptions) {
     this._options = options
   }
 
   get isOpen(): boolean {
-    return this._bridge !== null && this._stack !== null
+    return this._bridge !== null && this._stack !== null && this._pipeFailure === null
   }
 
   get vendorId(): number {
@@ -172,11 +181,11 @@ export class RndisTransport {
     const stack = await createStack()
 
     // Create a locally-administered MAC for our side
-    const localMac = generateLocalMac(deviceMac)
+    const localMac = deriveLocalMac(deviceMac)
 
     const tap = await stack.createTapInterface({
       mac: localMac,
-      ip: localIp as `${number}.${number}.${number}.${number}/${number}`,
+      ip: parseIpv4Cidr(localIp),
     })
 
     // ── Wire bridge ↔ tcpip.js ──────────────────────────────────────────
@@ -191,7 +200,15 @@ export class RndisTransport {
 
     // tcpip → Device: stack's outgoing frames go to USB bulk OUT
     this._readerCancelled = false
-    void this._pipeReadableTobridge(tap.readable, bridge)
+    this._pipeFailure = null
+    this._pipeReadableToBridge(tap.readable, bridge).catch((err: unknown) => {
+      this._pipeFailure = new TransportError(
+        'RNDIS tunnel failed: device stopped accepting frames',
+        {
+          cause: err,
+        },
+      )
+    })
 
     bridge.startReceiving()
 
@@ -209,6 +226,9 @@ export class RndisTransport {
   async connectTcp(host: string, port: number): Promise<TcpConnection> {
     if (!this._stack) {
       throw new TransportError('RNDIS transport is not open')
+    }
+    if (this._pipeFailure !== null) {
+      throw this._pipeFailure
     }
     return this._stack.connectTcp({ host, port })
   }
@@ -268,8 +288,14 @@ export class RndisTransport {
 
   // ── Private ─────────────────────────────────────────────────────────────
 
-  /** Pipe tap.readable → bridge.sendFrame in the background */
-  private async _pipeReadableTobridge(
+  /**
+   * Pipe tap.readable → bridge.sendFrame in the background.
+   *
+   * Resolves when the transport is closed. Rejects only if the pipe breaks
+   * while the transport is still open -- that is a real fault the caller
+   * must record, not a teardown artefact.
+   */
+  private async _pipeReadableToBridge(
     readable: ReadableStream<Uint8Array>,
     bridge: RndisBridge,
   ): Promise<void> {
@@ -280,8 +306,9 @@ export class RndisTransport {
         if (done) break
         await bridge.sendFrame(value)
       }
-    } catch {
-      // Transport closing
+    } catch (err: unknown) {
+      // Errors during close() are expected: the stack tears the tap down under us.
+      if (!this._readerCancelled) throw err
     } finally {
       reader.releaseLock()
     }
@@ -305,18 +332,4 @@ export class RndisTransport {
       /* ignore */
     }
   }
-}
-
-/**
- * Generate a locally-administered MAC address based on the device's MAC.
- * Sets the locally-administered bit and flips the last byte.
- */
-function generateLocalMac(
-  deviceMac: string,
-): `${string}:${string}:${string}:${string}:${string}:${string}` {
-  const parts = deviceMac.split(':')
-  // Set locally-administered bit (bit 1 of first octet)
-  const firstOctet = (parseInt(parts[0] ?? '02', 16) | 0x02) & 0xfe
-  const lastOctet = (parseInt(parts[5] ?? '01', 16) + 1) & 0xff
-  return `${firstOctet.toString(16).padStart(2, '0')}:${parts[1] ?? '00'}:${parts[2] ?? '00'}:${parts[3] ?? '00'}:${parts[4] ?? '00'}:${lastOctet.toString(16).padStart(2, '0')}` as `${string}:${string}:${string}:${string}:${string}:${string}`
 }
